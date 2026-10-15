@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Register — Penman AI{% endblock %}
+
+{% block content %}
+<div class="container py-5" style="max-width: 480px;">
+    <div class="card shadow-sm">
+        <div class="card-body p-4">
+            <h3 class="mb-3">Create your account</h3>
+
+            {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+            {% endif %}
+            {% if info %}
+            <div class="alert alert-info">{{ info }}</div>
+            {% endif %}
+
+            <form action="/auth/register" method="post">
+                <div class="mb-3">
+                    <label class="form-label">Display Name</label>
+                    <input type="text" name="display_name" class="form-control" placeholder="Juan Dela Cruz">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Email</label>
+                    <input type="email" name="email" class="form-control" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Password</label>
+                    <input type="password" name="password" class="form-control" minlength="6" required>
+                    <div class="form-text">At least 6 characters.</div>
+                </div>
+                <button class="btn btn-primary w-100" type="submit">Register</button>
+            </form>
+
+            <p class="text-center mt-3 mb-0 small">
+                Already have an account? <a href="/login">Login</a>
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Penman AI — Write Better, Keep Your Voice{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="text-center mb-5">
+        <h1 class="display-4 fw-bold">Penman AI</h1>
+        <p class="lead text-muted">Write better. Keep your voice.</p>
+        <a href="/register" class="btn btn-primary btn-lg me-2">Get Started</a>
+        <a href="/login" class="btn btn-outline-secondary btn-lg">Login</a>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-md-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">Grammar & Syntax</h5>
+                    <p class="card-text">Catch spelling, grammar, and punctuation errors without losing your style.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">Structural Feedback</h5>
+                    <p class="card-text">Evaluate introduction, body, conclusion, flow, and tone of your essay.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">Contextual Analysis</h5>
+                    <p class="card-text">Suggestions that respect your essay type, tone, and intent.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
