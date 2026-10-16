@@ -31,7 +31,4 @@ Thumbs.db
 # Logs
 *.log
 
-# Keep these (documentation, requirements)
-!.env.example
-!requirements.txt
-!requirements-lock.txt
+

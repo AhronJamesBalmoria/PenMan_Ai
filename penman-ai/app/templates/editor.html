@@ -1,12 +1,92 @@
 {% extends "base.html" %}
 {% block title %}Editor — Penman AI{% endblock %}
 
+{% block head %}
+<link href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css" rel="stylesheet">
+{% endblock %}
+
 {% block content %}
-<div class="container py-5">
-    <h2>Editor</h2>
-    <p class="text-muted">Editor UI will be built on Day 3.</p>
-    <div class="alert alert-success">
-        ✅ Auth + consent flow is working. You are logged in as <strong>{{ user.email }}</strong>.
+<div class="container-fluid py-4">
+    <div class="row g-3">
+
+        <!-- LEFT: Editor -->
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-body">
+
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h4 class="mb-0">{% if draft %}Edit Draft{% else %}New Draft{% endif %}</h4>
+                        <span class="text-muted small"><span id="word-count">0</span> words</span>
+                    </div>
+
+                    <form id="draft-form" method="post" action="/drafts/save" hx-post="/drafts/save"
+                        hx-target="#save-status" hx-swap="innerHTML">
+
+                        <input type="hidden" name="draft_id" id="draft-id" value="{{ draft.id if draft else '' }}">
+                        <input type="hidden" name="content" id="content-input"
+                            value="{{ draft.content if draft else '' }}">
+                        <input type="hidden" name="plain_text" id="plain-text-input"
+                            value="{{ draft.plain_text if draft else '' }}">
+                        <input type="hidden" name="word_count" id="word-count-input"
+                            value="{{ draft.word_count if draft else 0 }}">
+
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-8">
+                                <label class="form-label small mb-1">Title</label>
+                                <input type="text" name="title" class="form-control"
+                                    value="{{ draft.title if draft else '' }}" placeholder="Untitled">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small mb-1">Essay Type</label>
+                                <select name="essay_type" class="form-select">
+                                    {% set types =
+                                    ['argumentative','expository','narrative','descriptive','persuasive','research','creative']
+                                    %}
+                                    {% set current = draft.essay_type if draft else 'expository' %}
+                                    {% for t in types %}
+                                    <option value="{{ t }}" {% if t==current %}selected{% endif %}>{{ t|capitalize }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div id="editor-container" style="height: 420px; background: #fff;"></div>
+
+                        <div class="d-flex justify-content-between align-items-center mt-3">
+                            <div class="d-flex gap-2">
+                                <button type="submit" class="btn btn-primary">Save Draft</button>
+                                <label class="btn btn-outline-secondary mb-0">
+                                    Upload .txt / .docx
+                                    <input type="file" id="file-upload" accept=".txt,.docx" hidden>
+                                </label>
+                            </div>
+                            <span id="save-status" class="small"></span>
+                        </div>
+                    </form>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT: Placeholder for Day 4 feedback panel -->
+        <div class="col-lg-4">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h5 class="mb-3">Feedback</h5>
+                    <p class="text-muted small mb-0">
+                        Grammar, structural, and contextual feedback will appear here
+                        starting on Day 4 when the analysis engine is wired up.
+                    </p>
+                </div>
+            </div>
+        </div>
+
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
+<script src="/static/js/editor.js"></script>
 {% endblock %}
