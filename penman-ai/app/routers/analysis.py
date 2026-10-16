@@ -52,3 +52,19 @@ async def analyze_structure_route(
         "partials/structure_results.html",
         {"request": request, **result},
     )
+
+from app.services.contextual import analyze_contextual
+
+
+@router.post("/contextual", response_class=HTMLResponse)
+async def analyze_contextual_route(
+    request: Request,
+    plain_text: str = Form(""),
+    essay_type: str = Form("expository"),
+    user: dict = Depends(get_current_user),
+):
+    result = await analyze_contextual(plain_text, essay_type)
+    return templates.TemplateResponse(
+        "partials/contextual_results.html",
+        {"request": request, **result},
+    )

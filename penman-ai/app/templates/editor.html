@@ -87,6 +87,11 @@
                                 hx-swap="innerHTML" hx-indicator="#analyze-spinner">
                                 Structure
                             </button>
+                            <button type="button" class="btn btn-sm btn-outline-info" hx-post="/api/analyze/contextual"
+                                hx-include="#plain-text-input, select[name='essay_type']" hx-target="#feedback-panel"
+                                hx-swap="innerHTML" hx-indicator="#analyze-spinner">
+                                Context
+                            </button>
                         </div>
                     </div>
 

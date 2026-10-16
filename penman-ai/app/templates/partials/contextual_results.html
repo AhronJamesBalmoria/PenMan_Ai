@@ -1,0 +1,40 @@
+{% if error %}
+<div class="alert alert-danger small mb-0">{{ error }}</div>
+{% else %}
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <span class="fw-semibold">Contextual Analysis</span>
+    <div>
+        <span class="badge text-bg-secondary me-1">{{ model_used }}</span>
+        <span class="badge text-bg-info">Alignment: {{ alignment_score }}/5</span>
+    </div>
+</div>
+
+<div class="mb-3 p-2 bg-light rounded small">
+    <div><strong>Tone:</strong> {{ tone }}</div>
+    <div><strong>Register:</strong> {{ register }}</div>
+    <div><strong>Intent:</strong> {{ intent }}</div>
+    {% if alignment_note %}
+    <div class="mt-1 text-muted fst-italic">{{ alignment_note }}</div>
+    {% endif %}
+</div>
+
+{% if suggestions %}
+<div class="fw-semibold small mb-2">Suggestions</div>
+<div class="list-group list-group-flush" style="max-height: 400px; overflow-y: auto;">
+    {% for s in suggestions %}
+    {% set p = s.priority or 'low' %}
+    {% set color = 'danger' if p == 'high' else 'warning' if p == 'medium' else 'secondary' %}
+    <div class="list-group-item px-0">
+        <div class="d-flex justify-content-between mb-1">
+            <span class="badge text-bg-{{ color }}">{{ p|upper }}</span>
+            <span class="text-muted small">{{ s.category }}</span>
+        </div>
+        <div class="small fw-semibold">{{ s.issue }}</div>
+        <div class="small text-muted mt-1">{{ s.recommendation }}</div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<p class="text-muted small mb-0">No contextual suggestions — the essay already aligns well with its type.</p>
+{% endif %}
+{% endif %}
