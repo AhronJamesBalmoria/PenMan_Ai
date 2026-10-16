@@ -10,10 +10,8 @@ app = FastAPI(title="Penman AI", version="0.1.0")
 
 @app.exception_handler(RedirectException)
 async def redirect_handler(request: Request, exc: RedirectException):
-    # If the request came from HTMX, tell HTMX to do a full-page redirect
     if request.headers.get("HX-Request") == "true":
         return Response(status_code=200, headers={"HX-Redirect": exc.url})
-    # Otherwise return a normal redirect
     return RedirectResponse(url=exc.url, status_code=303)
 
 

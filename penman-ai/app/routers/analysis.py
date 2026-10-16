@@ -36,3 +36,19 @@ async def analyze_grammar(
             "count": len(matches),
         },
     )
+
+from app.services.structure import analyze_structure
+
+
+@router.post("/structure", response_class=HTMLResponse)
+async def analyze_structure_route(
+    request: Request,
+    plain_text: str = Form(""),
+    essay_type: str = Form("expository"),
+    user: dict = Depends(get_current_user),
+):
+    result = await analyze_structure(plain_text, essay_type)
+    return templates.TemplateResponse(
+        "partials/structure_results.html",
+        {"request": request, **result},
+    )

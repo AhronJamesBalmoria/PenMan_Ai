@@ -1,0 +1,40 @@
+{% if error %}
+<div class="alert alert-danger small mb-0">{{ error }}</div>
+{% else %}
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <span class="fw-semibold">Structural Analysis</span>
+    <div>
+        <span class="badge text-bg-secondary me-1">{{ model_used }}</span>
+        <span class="badge text-bg-primary">Overall: {{ scores.overall }}/5</span>
+    </div>
+</div>
+
+<div class="list-group list-group-flush" style="max-height: 500px; overflow-y: auto;">
+    {% set items = [
+    ('Introduction', 'introduction'),
+    ('Body', 'body'),
+    ('Conclusion', 'conclusion'),
+    ('Flow', 'flow'),
+    ('Tone', 'tone')
+    ] %}
+
+    {% for label, key in items %}
+    {% set s = scores[key] %}
+    {% set color = 'success' if s >= 4 else 'warning' if s >= 3 else 'danger' %}
+    <div class="list-group-item px-0">
+        <div class="d-flex justify-content-between align-items-center mb-1">
+            <span class="fw-semibold small">{{ label }}</span>
+            <span class="badge text-bg-{{ color }}">{{ s }}/5</span>
+        </div>
+        <div class="small text-muted">{{ feedback[key] }}</div>
+    </div>
+    {% endfor %}
+
+    {% if summary %}
+    <div class="list-group-item px-0 bg-light">
+        <div class="fw-semibold small mb-1">Summary</div>
+        <div class="small">{{ summary }}</div>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
