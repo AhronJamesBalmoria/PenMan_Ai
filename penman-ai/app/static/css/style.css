@@ -30,3 +30,16 @@ body {
     min-width: 180px;
     text-align: right;
 }
+
+/* HTMX loading indicator */
+.htmx-indicator {
+    display: none;
+}
+
+.htmx-request .htmx-indicator {
+    display: block;
+}
+
+.htmx-request.htmx-indicator {
+    display: block;
+}

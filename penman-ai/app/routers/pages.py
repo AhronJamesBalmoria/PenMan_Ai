@@ -8,6 +8,10 @@ from app.db.supabase_client import get_supabase_with_token
 router = APIRouter(tags=["pages"])
 templates = Jinja2Templates(directory="app/templates")
 
+@router.get("/offline", response_class=HTMLResponse)
+async def offline_page(request: Request):
+    return templates.TemplateResponse("offline.html", {"request": request})
+
 
 def _check_consent(client, user_id: str) -> bool:
     try:

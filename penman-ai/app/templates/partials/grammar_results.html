@@ -1,0 +1,49 @@
+{% if error %}
+<div class="alert alert-danger small mb-0">{{ error }}</div>
+{% elif count == 0 %}
+<div class="alert alert-success small mb-0">✓ No grammar issues found. Great work!</div>
+{% else %}
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <span class="fw-semibold">{{ count }} issue{{ 's' if count != 1 else '' }} found</span>
+    {% if truncated %}
+    <span class="badge text-bg-warning">Text truncated at 20,000 chars</span>
+    {% endif %}
+</div>
+
+<div class="list-group list-group-flush" style="max-height: 500px; overflow-y: auto;">
+    {% for m in matches %}
+    {% set cat = m.category_id %}
+    {% if cat in ['TYPOS', 'GRAMMAR', 'PUNCTUATION'] %}
+    {% set color = 'danger' %}
+    {% elif cat in ['STYLE', 'REDUNDANCY'] %}
+    {% set color = 'warning' %}
+    {% else %}
+    {% set color = 'secondary' %}
+    {% endif %}
+
+    <div class="list-group-item px-0">
+        <div class="d-flex justify-content-between">
+            <span class="badge text-bg-{{ color }} mb-1">{{ m.category_name }}</span>
+            <span class="text-muted small">@{{ m.offset }}</span>
+        </div>
+        <div class="small">{{ m.message }}</div>
+
+        {% if m.context and m.context.text %}
+        <div class="small text-muted mt-1">
+            ...{{ m.context.text[:40] }}<strong>{{ m.context.text[m.context.offset:m.context.offset + m.context.length]
+                }}</strong>{{ m.context.text[m.context.offset + m.context.length:80] }}...
+        </div>
+        {% endif %}
+
+        {% if m.replacements %}
+        <div class="mt-2 small">
+            <span class="text-muted">Suggest:</span>
+            {% for r in m.replacements %}
+            <span class="badge text-bg-light border text-dark me-1">{{ r }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
