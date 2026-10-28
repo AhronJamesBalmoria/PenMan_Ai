@@ -111,3 +111,8 @@ async def drafts_page(request: Request, user: dict = Depends(get_current_user)):
         "drafts.html",
         {"request": request, "user": user, "drafts": drafts},
     )
+
+@router.get("/health")
+async def health_check():
+    """Simple health check endpoint for monitoring and deployment."""
+    return {"status": "ok", "app": "Penman AI", "version": "0.1.0"}

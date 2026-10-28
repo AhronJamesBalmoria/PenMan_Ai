@@ -35,7 +35,14 @@ document.addEventListener('DOMContentLoaded', function () {
         contentInput.value = html;
         plainInput.value = text;
         wordInput.value = words;
-        wordCountEl.textContent = words;
+
+        if (words > 0 && words < 50) {
+            wordCountEl.textContent = words + ' (add more for analysis)';
+            wordCountEl.style.color = '#dc3545';
+        } else {
+            wordCountEl.textContent = words;
+            wordCountEl.style.color = '';
+        }
     }
 
     quill.on('text-change', updateFields);
@@ -72,6 +79,48 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
     }
+
+    // ---------- Auto-save every 30 seconds ----------
+    let lastSavedHash = '';
+    setInterval(async () => {
+        const html = quill.root.innerHTML;
+        const text = quill.getText().trim();
+
+        // Skip if empty or unchanged since last autosave
+        if (!text || text.length < 10) return;
+        const hash = html.length + ':' + text.slice(0, 100);
+        if (hash === lastSavedHash) return;
+
+        const form = document.getElementById('draft-form');
+        const formData = new FormData(form);
+
+        try {
+            const res = await fetch('/drafts/save', {
+                method: 'POST',
+                headers: { 'HX-Request': 'true' },
+                body: formData,
+            });
+
+            if (res.ok) {
+                lastSavedHash = hash;
+                const status = document.getElementById('save-status');
+                if (status) {
+                    status.innerHTML = '<span class="text-muted">Auto-saved ' +
+                        new Date().toLocaleTimeString() + '</span>';
+                }
+                // Capture new draft ID if this was the first autosave
+                const temp = document.createElement('div');
+                temp.innerHTML = await res.text();
+                const hidden = temp.querySelector('#new-draft-id');
+                if (hidden) {
+                    document.getElementById('draft-id').value = hidden.value;
+                }
+            }
+        } catch (err) {
+            // Silent failure — autosave shouldn't disrupt the writer
+            console.warn('Auto-save failed:', err);
+        }
+    }, 30000);
 });
 
 // Called after HTMX save returns
