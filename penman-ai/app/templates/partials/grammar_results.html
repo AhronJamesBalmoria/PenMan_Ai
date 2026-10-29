@@ -29,9 +29,12 @@
         <div class="small">{{ m.message }}</div>
 
         {% if m.context and m.context.text %}
+        {% set ctx = m.context.text %}
+        {% set start = m.context.offset %}
+        {% set end = start + m.context.length %}
         <div class="small text-muted mt-1">
-            ...{{ m.context.text[:40] }}<strong>{{ m.context.text[m.context.offset:m.context.offset + m.context.length]
-                }}</strong>{{ m.context.text[m.context.offset + m.context.length:80] }}...
+            …{{ ctx[start - 30 if start > 30 else 0:start] }}<strong>{{ ctx[start:end] }}</strong>{{
+            ctx[end:end + 30] }}…
         </div>
         {% endif %}
 

@@ -19,8 +19,9 @@ ENV/
 *.swp
 *.swo
 
-# Testing
+# Testing / linting
 .pytest_cache/
+.ruff_cache/
 .coverage
 htmlcov/
 

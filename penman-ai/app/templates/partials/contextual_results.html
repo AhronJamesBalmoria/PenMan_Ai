@@ -5,14 +5,18 @@
     <span class="fw-semibold">Contextual Analysis</span>
     <div>
         <span class="badge text-bg-secondary me-1">{{ model_used }}</span>
-        <span class="badge text-bg-info">Alignment: {{ alignment_score }}/5</span>
+        <span class="badge text-bg-info">Alignment: {{ alignment_score if alignment_score else '—' }}/5</span>
     </div>
 </div>
+
+{% if truncated %}
+<div class="alert alert-warning small py-1">Only the first 15,000 characters were analyzed.</div>
+{% endif %}
 
 <div class="mb-3 p-2 bg-light rounded small">
     <div><strong>Tone:</strong> {{ tone }}</div>
     <div><strong>Register:</strong> {{ register }}</div>
-    <div><strong>Intent:</strong> {{ intent }}</div>
+    <div><strong>Intent:</strong> {{ intent or '—' }}</div>
     {% if alignment_note %}
     <div class="mt-1 text-muted fst-italic">{{ alignment_note }}</div>
     {% endif %}
