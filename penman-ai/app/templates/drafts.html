@@ -7,6 +7,13 @@
         <a href="/editor" class="btn btn-primary">+ New Draft</a>
     </div>
 
+    {% if error %}
+    <div class="alert alert-danger">{{ error }}</div>
+    {% endif %}
+    {% if deleted %}
+    <div class="alert alert-success">Draft deleted.</div>
+    {% endif %}
+
     {% if drafts %}
     <div class="card shadow-sm">
         <div class="table-responsive">

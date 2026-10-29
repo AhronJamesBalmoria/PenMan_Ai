@@ -2,6 +2,17 @@ document.addEventListener('DOMContentLoaded', function () {
     const container = document.getElementById('editor-container');
     if (!container) return;
 
+    const form = document.getElementById('draft-form');
+    const contentInput = document.getElementById('content-input');
+    const plainInput = document.getElementById('plain-text-input');
+    const wordInput = document.getElementById('word-count-input');
+    const wordCountEl = document.getElementById('word-count');
+    const draftIdInput = document.getElementById('draft-id');
+    const saveStatus = document.getElementById('save-status');
+
+    const AUTOSAVE_DELAY = 2000;
+    const AUTOSAVE_INTERVAL = 30000;
+
     const quill = new Quill('#editor-container', {
         theme: 'snow',
         placeholder: 'Start writing or paste your essay here...',
@@ -15,11 +26,6 @@ document.addEventListener('DOMContentLoaded', function () {
             ],
         },
     });
-
-    const contentInput = document.getElementById('content-input');
-    const plainInput = document.getElementById('plain-text-input');
-    const wordInput = document.getElementById('word-count-input');
-    const wordCountEl = document.getElementById('word-count');
 
     // Load existing draft
     const initialHTML = contentInput.value;
@@ -45,8 +51,174 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    quill.on('text-change', updateFields);
+    // FNV-1a over the full document: any edit changes the hash, including
+    // same-length edits in the middle of the text.
+    function contentHash() {
+        const value = quill.root.innerHTML;
+        let hash = 0x811c9dc5;
+        for (let i = 0; i < value.length; i++) {
+            hash ^= value.charCodeAt(i);
+            hash = Math.imul(hash, 0x01000193) >>> 0;
+        }
+        return hash.toString(16) + ':' + value.length;
+    }
+
+    function setStatus(message, tone) {
+        if (!saveStatus) return;
+        saveStatus.textContent = message;
+        saveStatus.className = 'small text-' + (tone || 'muted');
+    }
+
+    function applyDraftId(id) {
+        if (!id || !draftIdInput || draftIdInput.value === id) return;
+        draftIdInput.value = id;
+    }
+
+    let lastSavedHash = contentHash();
+    let inFlight = false;
+    let pending = false;
+    let debounceTimer = null;
+
+    function formData() {
+        updateFields();
+        return new FormData(form);
+    }
+
+    // The save endpoint answers with a small HTML fragment on failure; pull the
+    // text out so limits ("too large") reach the user instead of a generic line.
+    async function readErrorMessage(res) {
+        try {
+            const body = await res.text();
+            if (!body) return '';
+            const doc = new DOMParser().parseFromString(body, 'text/html');
+            return (doc.body.textContent || '').trim().slice(0, 200);
+        } catch (err) {
+            return '';
+        }
+    }
+
+    async function saveDraft(options) {
+        const opts = options || {};
+        if (!form || inFlight) {
+            if (inFlight) pending = true;
+            return;
+        }
+
+        const hash = contentHash();
+        const draftIdBefore = draftIdInput ? draftIdInput.value : '';
+        updateFields();
+
+        // A brand-new, empty editor has nothing worth storing yet. An explicit
+        // save — or an existing draft the user just emptied — must go through,
+        // otherwise deleting all the text can never be persisted.
+        if (!opts.force && !draftIdBefore && quill.getText().trim().length === 0) return;
+        if (!opts.force && hash === lastSavedHash) return;
+
+        inFlight = true;
+        setStatus('Saving…', 'muted');
+
+        try {
+            const res = await fetch('/drafts/save', {
+                method: 'POST',
+                headers: { 'HX-Request': 'true' },
+                body: formData(),
+            });
+
+            // The session expired: the server asks us to navigate to /login.
+            const redirect = res.headers.get('HX-Redirect');
+            if (redirect) {
+                window.location.href = redirect;
+                return;
+            }
+
+            if (!res.ok) {
+                const message = await readErrorMessage(res);
+
+                // 400/404 mean this tab holds a draft id the server no longer
+                // recognises. Keeping it would retry the same doomed update
+                // forever, so drop it and save the text as a new draft.
+                if (
+                    (res.status === 400 || res.status === 404) &&
+                    draftIdInput &&
+                    draftIdInput.value
+                ) {
+                    draftIdInput.value = '';
+                    setStatus('That draft is no longer available — saving a new copy…', 'warning');
+                    pending = true;
+                    return;
+                }
+
+                setStatus(message || 'Could not save — will retry.', 'danger');
+                return;
+            }
+
+            const trigger = res.headers.get('HX-Trigger');
+            if (trigger) {
+                try {
+                    const payload = JSON.parse(trigger);
+                    if (payload.draftSaved) applyDraftId(payload.draftSaved.id);
+                } catch (err) {
+                    // Ignore malformed trigger payloads.
+                }
+            }
+
+            lastSavedHash = hash;
+            const time = new Date().toLocaleTimeString();
+            setStatus((opts.auto ? 'Auto-saved ' : 'Saved ') + time, 'muted');
+        } catch (err) {
+            setStatus('Offline — changes not saved yet.', 'danger');
+        } finally {
+            inFlight = false;
+            if (pending) {
+                pending = false;
+                saveDraft({ auto: true });
+            }
+        }
+    }
+
+    let afterFirstInteraction = false;
+
+    function scheduleAutosave() {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+            if (afterFirstInteraction) saveDraft({ auto: true });
+        }, AUTOSAVE_DELAY);
+    }
+
+    quill.on('text-change', function () {
+        updateFields();
+        afterFirstInteraction = true;
+        scheduleAutosave();
+    });
+
+    // Safety net: catch slow, continuous typing that keeps resetting the debounce.
+    setInterval(function () {
+        if (afterFirstInteraction) saveDraft({ auto: true });
+    }, AUTOSAVE_INTERVAL);
+
+    // One save path for manual and automatic saves. Going through the same
+    // function keeps the in-flight guard (and therefore the draft id) in sync,
+    // which is what prevents the second save from creating a new row.
+    if (form) {
+        form.addEventListener('submit', function (event) {
+            event.preventDefault();
+            saveDraft({ force: true });
+        });
+    }
+
+    window.addEventListener('pagehide', function () {
+        if (!afterFirstInteraction || !draftIdInput || !draftIdInput.value) return;
+        if (contentHash() === lastSavedHash) return;
+        // Best-effort flush; response is ignored by design.
+        try {
+            navigator.sendBeacon('/drafts/save', formData());
+        } catch (err) {
+            // Nothing useful to do while the page is going away.
+        }
+    });
+
     updateFields();
+    lastSavedHash = contentHash();
 
     // File upload
     const fileInput = document.getElementById('file-upload');
@@ -55,23 +227,37 @@ document.addEventListener('DOMContentLoaded', function () {
             const file = e.target.files[0];
             if (!file) return;
 
-            const formData = new FormData();
-            formData.append('file', file);
+            const uploadData = new FormData();
+            uploadData.append('file', file);
 
             try {
                 const res = await fetch('/api/drafts/upload', {
                     method: 'POST',
-                    body: formData,
+                    headers: { 'HX-Request': 'true' },
+                    body: uploadData,
                 });
 
-                if (!res.ok) {
-                    const err = await res.json().catch(() => ({ detail: 'Upload failed' }));
-                    throw new Error(err.detail || 'Upload failed');
+                const redirect = res.headers.get('HX-Redirect');
+                if (redirect) {
+                    window.location.href = redirect;
+                    return;
+                }
+
+                const contentType = res.headers.get('content-type') || '';
+                if (!res.ok || !contentType.includes('application/json')) {
+                    let message = 'Upload failed';
+                    if (contentType.includes('application/json')) {
+                        const err = await res.json().catch(() => ({}));
+                        message = err.detail || message;
+                    }
+                    throw new Error(message);
                 }
 
                 const data = await res.json();
-                quill.setText(data.text);
+                quill.setText(data.text || '');
                 updateFields();
+                afterFirstInteraction = true;
+                saveDraft({ force: true });
             } catch (err) {
                 alert('Upload error: ' + err.message);
             } finally {
@@ -79,55 +265,4 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
     }
-
-    // ---------- Auto-save every 30 seconds ----------
-    let lastSavedHash = '';
-    setInterval(async () => {
-        const html = quill.root.innerHTML;
-        const text = quill.getText().trim();
-
-        // Skip if empty or unchanged since last autosave
-        if (!text || text.length < 10) return;
-        const hash = html.length + ':' + text.slice(0, 100);
-        if (hash === lastSavedHash) return;
-
-        const form = document.getElementById('draft-form');
-        const formData = new FormData(form);
-
-        try {
-            const res = await fetch('/drafts/save', {
-                method: 'POST',
-                headers: { 'HX-Request': 'true' },
-                body: formData,
-            });
-
-            if (res.ok) {
-                lastSavedHash = hash;
-                const status = document.getElementById('save-status');
-                if (status) {
-                    status.innerHTML = '<span class="text-muted">Auto-saved ' +
-                        new Date().toLocaleTimeString() + '</span>';
-                }
-                // Capture new draft ID if this was the first autosave
-                const temp = document.createElement('div');
-                temp.innerHTML = await res.text();
-                const hidden = temp.querySelector('#new-draft-id');
-                if (hidden) {
-                    document.getElementById('draft-id').value = hidden.value;
-                }
-            }
-        } catch (err) {
-            // Silent failure — autosave shouldn't disrupt the writer
-            console.warn('Auto-save failed:', err);
-        }
-    }, 30000);
 });
-
-// Called after HTMX save returns
-function handleSaveResponse() {
-    const hidden = document.getElementById('new-draft-id');
-    if (hidden) {
-        document.getElementById('draft-id').value = hidden.value;
-        hidden.remove();
-    }
-}
