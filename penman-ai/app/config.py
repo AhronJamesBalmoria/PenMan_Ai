@@ -1,6 +1,8 @@
 """Application configuration loaded from environment variables."""
+import contextlib
 import logging
 import os
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -18,11 +20,6 @@ def _env_bool(name: str, default: bool = False) -> bool:
     if raw is None:
         return default
     return raw.strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _env_list(name: str, default: str) -> list[str]:
-    raw = os.getenv(name, default)
-    return [item.strip() for item in raw.split(",") if item.strip()]
 
 
 def is_jwt_shaped(value: str) -> bool:
@@ -48,16 +45,22 @@ class Settings:
     # HS256 secret from Supabase → Settings → API. When set, sessions are
     # verified locally (no network round-trip per request).
     SUPABASE_JWT_SECRET: str = os.getenv("SUPABASE_JWT_SECRET", "")
-    SUPABASE_JWT_AUDIENCE: str = os.getenv("SUPABASE_JWT_AUDIENCE", "authenticated")
+    SUPABASE_JWT_AUDIENCE: str = os.getenv(
+        "SUPABASE_JWT_AUDIENCE", "authenticated")
 
     # --- AI --------------------------------------------------------------
-    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
-    GEMINI_MODELS: list[str] = _env_list(
-        "GEMINI_MODELS",
-        "gemini-3.8-flash,gemini-3.7-flash,gemini-3.6-flash",
-    )
-    GEMINI_REQUEST_TIMEOUT: float = float(os.getenv("GEMINI_REQUEST_TIMEOUT", "45"))
-    GEMINI_TOTAL_TIMEOUT: float = float(os.getenv("GEMINI_TOTAL_TIMEOUT", "75"))
+    # Structure/contextual analysis and style-metric extraction go through
+    # Groq with an OpenRouter fallback. At least one key is required.
+    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
+    OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "")
+    # Groq retires models quickly; keep both names configurable so a model
+    # change is a .env edit rather than a code change. ``llama3-8b-8192`` is
+    # no longer offered, so gpt-oss-20b + Qwen are the current stable pair.
+    GROQ_MODEL: str = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
+    GROQ_FALLBACK_MODEL: str = os.getenv(
+        "GROQ_FALLBACK_MODEL", "qwen/qwen3.8-27b")
+    OPENROUTER_MODEL: str = os.getenv(
+        "OPENROUTER_MODEL", "google/gemma-4-26b-a4b-it:free")
 
     # --- sessions --------------------------------------------------------
     SESSION_COOKIE_NAME: str = "penman_session"
@@ -73,6 +76,18 @@ class Settings:
             return override.strip().lower() in {"1", "true", "yes", "on"}
         return self.APP_ENV.lower() == "production"
 
+    # --- style drift -----------------------------------------------------
+    # BGE-small style similarity is topic-sensitive: two unrelated formal
+    # essays measure ~0.56-0.59, while formal-vs-casual measures ~0.43-0.55.
+    # The score is a warning, never a block: raising the threshold catches
+    # more changes but also produces more false positives, and a false
+    # positive freezes the baseline until the user resets it from the editor.
+    STYLE_DRIFT_THRESHOLD: float = float(
+        os.getenv("STYLE_DRIFT_THRESHOLD", "0.60"))
+
+    # --- logging ---------------------------------------------------------
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
+
     # --- limits ----------------------------------------------------------
     MAX_ESSAY_CHARS: int = 15_000
     MAX_PLAIN_TEXT_CHARS: int = 100_000
@@ -82,13 +97,19 @@ class Settings:
 
     def validate(self) -> None:
         """Raise a clear error if required env vars are missing."""
+        # Skip validation in test environments so CI/local testing doesn't
+        # require real API keys - the real keys are only needed at runtime.
+        if os.getenv("APP_ENV", "development").strip().lower() == "test":
+            logger.warning("Skipping env validation in test mode.")
+            return
+
         missing = []
         if not self.SUPABASE_URL:
             missing.append("SUPABASE_URL")
         if not self.SUPABASE_ANON_KEY:
             missing.append("SUPABASE_ANON_KEY")
-        if not self.GEMINI_API_KEY:
-            missing.append("GEMINI_API_KEY")
+        if not (self.GROQ_API_KEY or self.OPENROUTER_API_KEY):
+            missing.append("GROQ_API_KEY (or OPENROUTER_API_KEY)")
 
         if missing:
             raise RuntimeError(
@@ -125,3 +146,31 @@ class Settings:
 
 
 settings = Settings()
+
+
+def configure_logging() -> None:
+    """Make application ``logger.info`` calls visible in the Uvicorn terminal.
+
+    Uvicorn only configures its own ``uvicorn.*`` loggers, so the application's
+    root logger otherwise stays at Python's WARNING default and every
+    ``logger.info`` in the services is silently dropped.
+    """
+    level = getattr(logging, settings.LOG_LEVEL, logging.INFO)
+    root = logging.getLogger()
+
+    if not root.handlers:
+        stream = sys.stdout
+        # Windows consoles default to cp1252, which cannot encode the emoji
+        # used by some model output. Replace rather than crash.
+        with contextlib.suppress(AttributeError, ValueError):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        logging.basicConfig(
+            level=level,
+            format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+            stream=stream,
+        )
+    else:
+        root.setLevel(level)
+
+
+configure_logging()

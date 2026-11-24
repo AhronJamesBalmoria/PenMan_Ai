@@ -66,6 +66,11 @@ def test_save_caps_title_length(client, store):
     assert len(next(iter(store.values()))["title"]) == 200
 
 
+def test_save_keeps_empty_title_empty(client, store):
+    client.post("/drafts/save", data=_payload(title=""), headers=HTMX)
+    assert next(iter(store.values()))["title"] == ""
+
+
 def test_save_rejects_oversized_content(client, store, monkeypatch):
     from app.config import settings
 

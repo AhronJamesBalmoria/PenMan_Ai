@@ -4,7 +4,16 @@ import logging
 from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+)
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from starlette.concurrency import run_in_threadpool
 
@@ -48,12 +57,23 @@ def _timestamp(value) -> str:
     return datetime.now(UTC).strftime("%H:%M:%S")
 
 
+def _redirect_after_delete(request: Request, url: str) -> Response:
+    """Send HTMX back to the drafts list without swapping HTML into a form.
+
+    The delete control is an ``hx-post`` so the CSP-safe ``hx-confirm`` prompt
+    works; HTMX would otherwise try to swap the redirect target into the form.
+    """
+    if request.headers.get("HX-Request") == "true":
+        return Response(status_code=200, headers={"HX-Redirect": url})
+    return RedirectResponse(url=url, status_code=303)
+
+
 # ---------- Save (create or update) — handles both HTMX and native POST ----------
 @router.post("/drafts/save", response_class=HTMLResponse)
 async def save_draft(
     request: Request,
     draft_id: str = Form(""),
-    title: str = Form("Untitled"),
+    title: str = Form(""),
     essay_type: str = Form("expository"),
     content: str = Form(""),
     plain_text: str = Form(""),
@@ -75,7 +95,7 @@ async def save_draft(
             return _error_body("Invalid draft reference.", 400, is_htmx)
 
     payload = {
-        "title": (title.strip() or "Untitled")[: settings.MAX_TITLE_CHARS],
+        "title": title.strip()[: settings.MAX_TITLE_CHARS],
         "essay_type": normalize_essay_type(essay_type),
         "content": content,
         "plain_text": plain_text,
@@ -152,12 +172,13 @@ async def save_draft(
 @router.post("/drafts/{draft_id}/delete")
 async def delete_draft(
     draft_id: str,
+    request: Request,
     user: dict = Depends(get_current_user),
     client=Depends(get_user_supabase),
 ):
     parsed_id = _parse_draft_id(draft_id)
     if parsed_id is None:
-        return RedirectResponse(url="/drafts?error=Invalid+draft.", status_code=303)
+        return _redirect_after_delete(request, "/drafts?error=Invalid+draft.")
 
     try:
         res = (
@@ -168,16 +189,14 @@ async def delete_draft(
             .execute()
         )
         if not res.data:
-            return RedirectResponse(
-                url="/drafts?error=Draft+not+found.", status_code=303
-            )
+            return _redirect_after_delete(request, "/drafts?error=Draft+not+found.")
     except Exception:
         logger.exception("Could not delete draft %s for %s", parsed_id, user["id"])
-        return RedirectResponse(
-            url="/drafts?error=Could+not+delete+that+draft.", status_code=303
+        return _redirect_after_delete(
+            request, "/drafts?error=Could+not+delete+that+draft."
         )
 
-    return RedirectResponse(url="/drafts?deleted=1", status_code=303)
+    return _redirect_after_delete(request, "/drafts?deleted=1")
 
 
 # ---------- File upload — returns extracted text as JSON ----------

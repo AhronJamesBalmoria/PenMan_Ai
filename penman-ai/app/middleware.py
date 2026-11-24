@@ -28,10 +28,10 @@ CONTENT_SECURITY_POLICY = "; ".join(
     [
         "default-src 'self'",
         "script-src 'self' https://cdn.jsdelivr.net https://unpkg.com",
-        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com",
         "img-src 'self' data:",
-        "font-src 'self' data: https://cdn.jsdelivr.net",
-        "connect-src 'self'",
+        "font-src 'self' data: https://cdn.jsdelivr.net https://fonts.gstatic.com",
+        "connect-src 'self' https://cdn.jsdelivr.net https://unpkg.com",
         "frame-ancestors 'none'",
         "base-uri 'self'",
         "form-action 'self'",

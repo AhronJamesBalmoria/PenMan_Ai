@@ -1,0 +1,6 @@
+{# HTMX target for the editor's "Reset baseline" button. #}
+{% if error %}
+<span class="text-danger">{{ error }}</span>
+{% else %}
+<span class="text-success">{{ message }}</span>
+{% endif %}

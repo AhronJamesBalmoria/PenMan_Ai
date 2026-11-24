@@ -1,10 +1,19 @@
 {% extends "base.html" %}
-{% block title %}My Drafts — Penman AI{% endblock %}
+{% block title %}My Drafts | Penman AI{% endblock %}
 {% block content %}
-<div class="container py-4">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h3 class="mb-0">My Drafts</h3>
-        <a href="/editor" class="btn btn-primary">+ New Draft</a>
+<div class="container-xl py-5">
+
+    <!-- Page header -->
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-3 mb-4">
+        <div>
+            <span class="workspace-badge">My Workspace</span>
+            <h1 class="fs-2 fw-bold mb-0 mt-2">My Drafts</h1>
+        </div>
+        <div>
+            <a href="/editor" class="btn btn-primary rounded-3 px-3">
+                <i class="bi bi-plus-lg me-1"></i> New Draft
+            </a>
+        </div>
     </div>
 
     {% if error %}
@@ -15,45 +24,44 @@
     {% endif %}
 
     {% if drafts %}
-    <div class="card shadow-sm">
-        <div class="table-responsive">
-            <table class="table table-hover mb-0 align-middle">
-                <thead class="table-light">
-                    <tr>
-                        <th>Title</th>
-                        <th>Type</th>
-                        <th class="text-end">Words</th>
-                        <th>Last Updated</th>
-                        <th class="text-end">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for d in drafts %}
-                    <tr>
-                        <td class="fw-semibold">{{ d.title or 'Untitled' }}</td>
-                        <td><span class="badge text-bg-secondary">{{ d.essay_type }}</span></td>
-                        <td class="text-end">{{ d.word_count }}</td>
-                        <td class="text-muted small">{{ d.updated_at[:19].replace('T', ' ') }}</td>
-                        <td class="text-end">
-                            <a href="/editor?draft_id={{ d.id }}" class="btn btn-sm btn-outline-primary">Open</a>
-                            <form action="/drafts/{{ d.id }}/delete" method="post" class="d-inline"
-                                onsubmit="return confirm('Delete this draft?');">
-                                <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
-                            </form>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+        {% for d in drafts %}
+        <div class="col">
+            <div class="draft-card position-relative">
+                <a href="/editor?draft_id={{ d.id }}" class="stretched-link" aria-label="Open {{ d.title or 'Untitled' }}"></a>
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="draft-type-badge">{{ d.essay_type|capitalize }}</span>
+                    <form action="/drafts/{{ d.id }}/delete" method="post" class="d-inline" style="position: relative; z-index: 2;"
+                        hx-post="/drafts/{{ d.id }}/delete"
+                        hx-confirm="Are you sure you want to delete this draft?"
+                        hx-swap="none">
+                        <button type="submit" class="btn btn-sm btn-link text-muted p-0 border-0">
+                            <i class="bi bi-trash3"></i>
+                        </button>
+                    </form>
+                </div>
+                <h5 class="fw-bold text-truncate mb-3">{{ d.title or 'Untitled' }}</h5>
+                <p class="text-muted small mb-3 draft-snippet">{{ d.content|striptags|truncate(100) }}</p>
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="text-muted small">{{ d.word_count }} words</span>
+                    <span class="text-muted small">{{ d.updated_at|format_date }}</span>
+                </div>
+            </div>
         </div>
+        {% endfor %}
     </div>
     {% else %}
-    <div class="card shadow-sm">
-        <div class="card-body text-center py-5">
-            <p class="text-muted mb-3">You haven't saved any drafts yet.</p>
-            <a href="/editor" class="btn btn-primary">Create your first draft</a>
+    <div class="empty-state-card text-center py-5">
+        <div class="empty-state-icon mx-auto mb-3">
+            <i class="bi bi-folder2-open"></i>
         </div>
+        <h4 class="fw-bold mb-2">No drafts yet</h4>
+        <p class="text-muted mb-4">Start writing your first essay and it will appear here.</p>
+        <a href="/editor" class="btn btn-primary rounded-3 px-4">
+            <i class="bi bi-plus-lg me-1"></i> Start Writing
+        </a>
     </div>
     {% endif %}
+
 </div>
 {% endblock %}

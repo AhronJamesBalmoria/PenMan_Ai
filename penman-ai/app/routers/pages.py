@@ -38,7 +38,7 @@ def _check_consent(client, user_id: str) -> bool:
 async def landing(request: Request):
     user = get_optional_user(request)
     if user:
-        return RedirectResponse(url="/editor", status_code=303)
+        return RedirectResponse(url="/drafts", status_code=303)
     return templates.TemplateResponse(
         "landing.html", {"request": request, "user": user}
     )
@@ -62,7 +62,7 @@ async def consent_page(
 ):
     try:
         if _check_consent(client, user["id"]):
-            return RedirectResponse(url="/editor", status_code=303)
+            return RedirectResponse(url="/drafts", status_code=303)
     except Exception:
         logger.warning("Consent check failed for %s", user["id"], exc_info=True)
     return templates.TemplateResponse(

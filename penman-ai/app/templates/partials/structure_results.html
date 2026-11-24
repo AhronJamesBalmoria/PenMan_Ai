@@ -1,19 +1,71 @@
+{% if drift_warning %}
+{% include "partials/drift_warning.html" %}
+{% endif %}
+
 {% if error %}
 <div class="alert alert-danger small mb-0">{{ error }}</div>
 {% else %}
-<div class="d-flex justify-content-between align-items-center mb-2">
-    <span class="fw-semibold">Structural Analysis</span>
-    <div>
-        <span class="badge text-bg-secondary me-1">{{ model_used }}</span>
-        <span class="badge text-bg-primary">Overall: {{ scores.overall if scores.overall else '—' }}/5</span>
-    </div>
+{% set overall = scores.overall if scores and scores.overall else None %}
+{% set overall_pct = overall * 20 if overall else 0 %}
+<span class="d-none" data-feedback-score="{{ overall_pct }}"></span>
+
+<div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+    <div class="text-uppercase text-muted small fw-semibold">Structural Analysis</div>
+    <span class="model-badge">{{ model_used }}</span>
+</div>
+
+<div class="progress score-progress mb-3" role="progressbar" aria-label="Overall writing score"
+    aria-valuenow="{{ overall_pct }}" aria-valuemin="0" aria-valuemax="100">
+    <div class="progress-bar score-bar-{{ overall_pct }}"></div>
 </div>
 
 {% if truncated %}
-<div class="alert alert-warning small py-1">Only the first 15,000 characters were analyzed.</div>
+<div class="badge text-bg-warning mb-3">Truncated to 15,000 chars</div>
 {% endif %}
 
-<div class="list-group list-group-flush" style="max-height: 500px; overflow-y: auto;">
+{% if specific_suggestions %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h6 class="mb-0 fw-bold">Suggestions</h6>
+    <span class="count-pill">{{ specific_suggestions|length }}</span>
+</div>
+
+<div class="suggestion-list mb-4">
+    {% for s in specific_suggestions %}
+    {% set original = s.original_text or '' %}
+    {% set score = s.score if s.score else 0 %}
+    <div class="suggestion-item{% if original %} structure-suggestion{% endif %}"
+        {% if original %}role="button" tabindex="0" data-original="{{ original | e }}"{% endif %}>
+        <div class="d-flex justify-content-between align-items-start gap-2">
+            <div class="suggestion-title">{{ s.issue_type or 'Suggestion' }}</div>
+            <div class="d-flex align-items-center gap-2">
+                {% if score %}
+                <span class="suggestion-score {% if score >= 85 %}is-high{% elif score >= 70 %}is-medium{% else %}is-low{% endif %}">{{ score }}</span>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if original %}
+        <div class="suggestion-quote">“{{ original }}”</div>
+        {% endif %}
+
+        {% if s.suggestion %}
+        <div class="suggestion-recommendation">{{ s.suggestion }}</div>
+        {% endif %}
+
+        {% if s.reason %}
+        <div class="suggestion-desc mt-1">{{ s.reason }}</div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state mb-4">No specific suggestions were returned for this essay.</div>
+{% endif %}
+
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <h6 class="mb-0 fw-bold">Section scores</h6>
+</div>
+<div class="d-flex flex-column">
     {% set items = [
     ('Introduction', 'introduction'),
     ('Body', 'body'),
@@ -23,22 +75,23 @@
     ] %}
 
     {% for label, key in items %}
-    {% set s = scores[key] %}
-    {% set color = 'success' if s and s >= 4 else 'warning' if s and s >= 3 else 'secondary' %}
-    <div class="list-group-item px-0">
+    {% set s = scores[key] if scores is defined and scores else None %}
+    {% set tone = 'is-strong' if s and s >= 4 else 'is-mid' if s == 3 else 'is-weak' if s and s <= 2 else '' %}
+    {% set fb = feedback[key] if feedback is defined and feedback else '' %}
+    <div class="section-score-row">
         <div class="d-flex justify-content-between align-items-center mb-1">
-            <span class="fw-semibold small">{{ label }}</span>
-            <span class="badge text-bg-{{ color }}">{{ s if s else '—' }}/5</span>
+            <span class="small fw-semibold">{{ label }}</span>
+            <span class="score-pill {{ tone }}">{{ s if s else '—' }}/5</span>
         </div>
-        <div class="small text-muted">{{ feedback[key] or 'No feedback returned for this section.' }}</div>
+        <div class="small text-muted">{{ fb or 'No feedback returned for this section.' }}</div>
     </div>
     {% endfor %}
-
-    {% if summary %}
-    <div class="list-group-item px-0 bg-light">
-        <div class="fw-semibold small mb-1">Summary</div>
-        <div class="small">{{ summary }}</div>
-    </div>
-    {% endif %}
 </div>
+
+{% if summary %}
+<div class="summary-box mt-4">
+    <div class="fw-semibold small mb-1">Summary</div>
+    <div class="small text-muted">{{ summary }}</div>
+</div>
+{% endif %}
 {% endif %}

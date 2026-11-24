@@ -178,7 +178,7 @@ def test_login_with_stale_cookie_keeps_new_session(anonymous_client, monkeypatch
     )
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/editor"
+    assert response.headers["location"] == "/drafts"
 
     cookies = response.headers.get_list("set-cookie")
     session_headers = [

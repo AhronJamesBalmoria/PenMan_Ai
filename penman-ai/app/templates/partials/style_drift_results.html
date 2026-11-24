@@ -1,0 +1,41 @@
+{% if error %}
+<div class="alert alert-danger small mb-0">{{ error }}</div>
+{% else %}
+<div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+    <span class="text-uppercase text-muted small fw-semibold">Style Drift Analysis</span>
+    <span class="model-badge">Similarity: {{ similarity }}</span>
+</div>
+
+{% if is_drastic %}
+<div class="drift-alert" role="alert">
+    <span class="drift-alert-icon" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z">
+            </path>
+            <path d="M12 9v4"></path>
+            <path d="M12 17h.01"></path>
+        </svg>
+    </span>
+    <div>
+        <div class="drift-alert-title">Drastic Style Change Detected</div>
+        <div class="drift-alert-text">
+            This draft is very different from your historical writing style (which is usually
+            <strong>{{ saved_tone }}</strong>). Did you intentionally change your tone for this piece, or did you paste
+            someone else's text?
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="success-alert" role="status">
+    <span class="success-alert-icon" aria-hidden="true">✓</span>
+    <div>
+        <div class="fw-semibold small">Style Consistent</div>
+        <div class="small text-muted">
+            This draft closely matches your historical writing style. Your tone and vocabulary are consistent with
+            your profile.
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endif %}

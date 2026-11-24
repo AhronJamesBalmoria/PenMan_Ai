@@ -12,6 +12,10 @@ os.environ.update(
         "SUPABASE_ANON_KEY": "test-anon-key",
         "SUPABASE_JWT_SECRET": "test-secret-key-for-unit-tests-0123456789",
         "GEMINI_API_KEY": "test-gemini-key",
+        # The new validate() requires at least one of these; set dummy values
+        # so the app starts cleanly in test mode without real API keys.
+        "GROQ_API_KEY": "test-groq-key",
+        "OPENROUTER_API_KEY": "test-openrouter-key",
     }
 )
 
@@ -30,13 +34,14 @@ class FakeResponse:
 
 
 class FakeQuery:
-    def __init__(self, store, operation, payload=None):
+    def __init__(self, store, operation, payload=None, on_conflict=None):
         self.store = store
         self.operation = operation
         self.payload = payload or {}
         self.filters = {}
         self.single_row = False
         self.order_by = None
+        self.on_conflict = on_conflict
 
     def select(self, *columns, **kwargs):
         self.operation = "select"
@@ -80,12 +85,34 @@ class FakeQuery:
 
         if self.operation == "upsert":
             row = dict(self.payload)
+            conflict_keys = [
+                key.strip()
+                for key in (self.on_conflict or "").split(",")
+                if key.strip()
+            ]
+            existing = None
+            if conflict_keys:
+                existing = next(
+                    (
+                        candidate
+                        for candidate in self.store.values()
+                        if all(
+                            candidate.get(key) == row.get(key)
+                            for key in conflict_keys
+                        )
+                    ),
+                    None,
+                )
+
+            if existing is not None:
+                existing.update(row)
+                existing["updated_at"] = stamp
+                return FakeResponse([existing])
+
             row.setdefault("id", str(uuid4()))
             row["updated_at"] = stamp
-            existing = self.store.get(row["id"], {})
-            existing.update(row)
-            self.store[row["id"]] = existing
-            return FakeResponse([existing])
+            self.store[row["id"]] = row
+            return FakeResponse([row])
 
         if self.operation == "delete":
             removed = self._matches()
@@ -118,8 +145,13 @@ class FakeTable:
     def update(self, payload):
         return FakeQuery(self.store, "update", payload)
 
-    def upsert(self, payload):
-        return FakeQuery(self.store, "upsert", payload)
+    def upsert(self, payload, **kwargs):
+        return FakeQuery(
+            self.store,
+            "upsert",
+            payload,
+            on_conflict=kwargs.get("on_conflict"),
+        )
 
     def delete(self):
         return FakeQuery(self.store, "delete")
@@ -131,7 +163,7 @@ class FakeSupabase:
         self.profiles = {}
 
     def table(self, name):
-        if name == "profiles":
+        if name in {"profiles", "author_profiles"}:
             return FakeTable(self.profiles)
         return FakeTable(self.drafts)
 

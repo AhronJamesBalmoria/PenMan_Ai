@@ -12,6 +12,10 @@ def test_editor_renders_for_consented_user(client, fake_db):
     assert response.status_code == 200
     assert 'id="draft-form"' in response.text
     assert 'id="draft-id"' in response.text
+    assert "feedback-sticky" in response.text
+    assert "nav nav-pills" in response.text
+    assert "placeholder-glow" in response.text
+    assert "data-feedback-tab" in response.text
     # The divs in the editor layout must balance out.
     assert response.text.count('<div') == response.text.count('</div>')
 
@@ -73,7 +77,7 @@ def test_consent_creates_missing_profile_row(client, fake_db):
     )
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/editor"
+    assert response.headers["location"] == "/drafts"
     assert fake_db.profiles[USER_ID]["consent_given"] is True
 
 

@@ -1,44 +1,80 @@
+{% if drift_warning %}
+{% include "partials/drift_warning.html" %}
+{% endif %}
+
 {% if error %}
 <div class="alert alert-danger small mb-0">{{ error }}</div>
 {% else %}
-<div class="d-flex justify-content-between align-items-center mb-2">
-    <span class="fw-semibold">Contextual Analysis</span>
-    <div>
-        <span class="badge text-bg-secondary me-1">{{ model_used }}</span>
-        <span class="badge text-bg-info">Alignment: {{ alignment_score if alignment_score else '—' }}/5</span>
-    </div>
+{% set alignment_pct = alignment_score * 20 if alignment_score else 0 %}
+<span class="d-none" data-feedback-score="{{ alignment_pct }}"></span>
+
+<div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+    <div class="text-uppercase text-muted small fw-semibold">Contextual Analysis</div>
+</div>
+
+<div class="d-flex flex-wrap gap-3 mb-2 contextual-meta">
+    <span>Tone: <span class="text-body fw-semibold">{{ tone or '—' }}</span></span>
+    <span>Register: <span class="text-body fw-semibold">{{ register or '—' }}</span></span>
+    <span>Alignment Score
+        <span class="text-body fw-semibold ms-1">{{ alignment_score if alignment_score else '—' }}</span><span
+            class="text-muted">/5</span>
+    </span>
 </div>
 
 {% if truncated %}
-<div class="alert alert-warning small py-1">Only the first 15,000 characters were analyzed.</div>
+<div class="badge text-bg-warning mb-3">Truncated to 15,000 chars</div>
 {% endif %}
 
-<div class="mb-3 p-2 bg-light rounded small">
-    <div><strong>Tone:</strong> {{ tone }}</div>
-    <div><strong>Register:</strong> {{ register }}</div>
-    <div><strong>Intent:</strong> {{ intent or '—' }}</div>
-    {% if alignment_note %}
-    <div class="mt-1 text-muted fst-italic">{{ alignment_note }}</div>
-    {% endif %}
+{% if intent %}
+<div class="small text-muted mb-2 ai-text"><span class="fw-semibold text-body">Intent:</span> {{ intent }}</div>
+{% endif %}
+
+{% if alignment_note %}
+<div class="alignment-note mb-3">
+    <div class="small text-muted ai-text">{{ alignment_note }}</div>
 </div>
+{% endif %}
 
 {% if suggestions %}
-<div class="fw-semibold small mb-2">Suggestions</div>
-<div class="list-group list-group-flush" style="max-height: 400px; overflow-y: auto;">
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <h6 class="mb-0 fw-bold">Contextual Suggestions</h6>
+    <span class="count-pill">{{ suggestions|length }}</span>
+</div>
+
+<div class="suggestion-list">
     {% for s in suggestions %}
-    {% set p = s.priority or 'low' %}
-    {% set color = 'danger' if p == 'high' else 'warning' if p == 'medium' else 'secondary' %}
-    <div class="list-group-item px-0">
-        <div class="d-flex justify-content-between mb-1">
-            <span class="badge text-bg-{{ color }}">{{ p|upper }}</span>
-            <span class="text-muted small">{{ s.category }}</span>
+    {% set p = (s.priority or 'low')|lower %}
+    {% set original = s.original_text or '' %}
+    {% set score = s.score if s.score else 0 %}
+    <div class="suggestion-item{% if original %} context-suggestion{% endif %}"
+        {% if original %}role="button" tabindex="0" data-original="{{ original | e }}"{% endif %}>
+        <div class="d-flex justify-content-between align-items-start gap-2">
+            <div class="d-flex align-items-center flex-wrap gap-2">
+                <div class="suggestion-title">{{ s.category or 'Suggestion' }}</div>
+                <span class="priority-pill is-{{ p }}">{{ p|capitalize }}</span>
+            </div>
+            {% if score %}
+            <span class="suggestion-score is-{{ p }}">{{ score }}</span>
+            {% endif %}
         </div>
-        <div class="small fw-semibold">{{ s.issue }}</div>
-        <div class="small text-muted mt-1">{{ s.recommendation }}</div>
+
+        {% if original %}
+        <div class="suggestion-quote">“{{ original }}”</div>
+        {% endif %}
+
+        {% if s.issue %}
+        <div class="suggestion-desc">{{ s.issue }}</div>
+        {% endif %}
+
+        {% if s.recommendation %}
+        <div class="suggestion-recommendation">{{ s.recommendation }}</div>
+        {% endif %}
     </div>
     {% endfor %}
 </div>
 {% else %}
-<p class="text-muted small mb-0">No contextual suggestions — the essay already aligns well with its type.</p>
+<div class="empty-state">
+    No contextual suggestions — the essay already aligns well with its type.
+</div>
 {% endif %}
 {% endif %}

@@ -94,7 +94,7 @@ async def login(
                 status_code=401,
             )
 
-        response = RedirectResponse(url="/editor", status_code=303)
+        response = RedirectResponse(url="/drafts", status_code=303)
         set_session_cookies(response, tokens)
         return response
     except Exception:
@@ -168,7 +168,7 @@ async def submit_consent(
         if not res.data:
             raise RuntimeError("Consent was not persisted")
 
-        return RedirectResponse(url="/editor", status_code=303)
+        return RedirectResponse(url="/drafts", status_code=303)
     except Exception:
         logger.exception("Failed to record consent for %s", user["id"])
         return templates.TemplateResponse(

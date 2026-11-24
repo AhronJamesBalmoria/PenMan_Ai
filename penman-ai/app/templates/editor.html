@@ -1,26 +1,34 @@
 {% extends "base.html" %}
-{% block title %}Editor — Penman AI{% endblock %}
+{% block title %}Editor | Penman AI{% endblock %}
 
 {% block head %}
 <link href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css" rel="stylesheet">
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid py-4">
-    <div class="row g-3">
+<div class="container-xl py-4">
+
+    <!-- Page header -->
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-2 mb-4">
+        <div>
+            <span class="workspace-badge"><i class="bi bi-pencil-square"></i> Writing Workspace</span>
+            <h1 class="page-title mb-1 mt-2">Essay Editor</h1>
+        </div>
+        <div class="page-stats text-md-end">
+            <span class="fw-semibold text-dark" id="word-count-top">0</span> words
+            <span class="mx-1">·</span>
+            <span id="char-count">0</span> characters
+            <span class="mx-1">·</span>
+            <span id="reading-time-top">0 min read</span>
+        </div>
+    </div>
+
+    <div class="row g-4">
 
         <!-- LEFT: Editor -->
         <div class="col-lg-8">
-            <div class="card shadow-sm">
-                <div class="card-body">
-
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h4 class="mb-0">
-                            {% if draft %}Edit Draft{% else %}New Draft{% endif %}
-                            {% if saved %}<span class="badge text-bg-success ms-2">Saved</span>{% endif %}
-                        </h4>
-                        <span class="text-muted small"><span id="word-count">0</span> words</span>
-                    </div>
+            <div class="editor-card">
+                <div class="card-body p-4 p-lg-5">
 
                     <form id="draft-form" method="post" action="/drafts/save">
 
@@ -32,36 +40,39 @@
                         <input type="hidden" name="word_count" id="word-count-input"
                             value="{{ draft.word_count if draft else 0 }}">
 
-                        <div class="row g-2 mb-3">
-                            <div class="col-md-8">
-                                <label class="form-label small mb-1" for="draft-title">Title</label>
-                                <input type="text" id="draft-title" name="title" class="form-control"
+                        <div class="editor-header d-flex flex-column flex-md-row gap-3">
+                            <div class="flex-grow-1 w-100">
+                                <label class="visually-hidden" for="draft-title">Title</label>
+                                <input type="text" id="draft-title" name="title" class="form-control title-input"
                                     maxlength="200" value="{{ draft.title if draft else '' }}"
-                                    placeholder="Untitled">
+                                    placeholder="Untitled Draft">
                             </div>
-                            <div class="col-md-4">
-                                <label class="form-label small mb-1" for="draft-essay-type">Essay Type</label>
+                            <div class="essay-type-field">
+                                <label class="essay-type-label" for="draft-essay-type">Essay Type</label>
                                 {% set current = draft.essay_type if draft else DEFAULT_ESSAY_TYPE %}
-                                <select id="draft-essay-type" name="essay_type" class="form-select">
+                                <select id="essay-type-select" name="essay_type" class="form-select essay-type-select">
                                     {% for t in ESSAY_TYPES %}
-                                    <option value="{{ t }}" {% if t == current %}selected{% endif %}>{{ t|capitalize }}
+                                    <option value="{{ t }}" {% if t==current %}selected{% endif %}>{{ t|capitalize }}
                                     </option>
                                     {% endfor %}
                                 </select>
                             </div>
                         </div>
 
-                        <div id="editor-container" style="height: 420px; background: #fff;"></div>
+                        <div id="editor-container" style="background: #fff;"></div>
 
-                        <div class="d-flex justify-content-between align-items-center mt-3">
-                            <div class="d-flex gap-2">
-                                <button type="submit" class="btn btn-primary">Save Draft</button>
-                                <label class="btn btn-outline-secondary mb-0">
-                                    Upload .txt / .docx
+                        <div class="editor-footer">
+                            <div class="d-flex align-items-center gap-2">
+                                {% if saved %}<span class="badge saved-badge">Saved</span>{% endif %}
+                                <span id="save-status" class="small" aria-live="polite"></span>
+                                <label class="btn btn-upload mb-0">
+                                    <i class="bi bi-upload"></i> Upload .docx
                                     <input type="file" id="file-upload" accept=".txt,.docx" hidden>
                                 </label>
+                                <button type="submit" class="btn btn-save">
+                                    <i class="bi bi-check2 me-1"></i> Save draft
+                                </button>
                             </div>
-                            <span id="save-status" class="small" aria-live="polite"></span>
                         </div>
                     </form>
 
@@ -70,43 +81,84 @@
         </div>
 
         <!-- RIGHT: Feedback panel -->
-        <div class="col-lg-4">
-            <div class="card shadow-sm">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h5 class="mb-0">Feedback</h5>
-                        <div class="d-flex gap-1">
-                            <button type="button" class="btn btn-sm btn-outline-primary" hx-post="/api/analyze/grammar"
-                                hx-include="#plain-text-input" hx-target="#feedback-panel" hx-swap="innerHTML"
-                                hx-indicator="#analyze-spinner">
-                                Grammar
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline-success"
-                                hx-post="/api/analyze/structure"
-                                hx-include="#plain-text-input, select[name='essay_type']" hx-target="#feedback-panel"
-                                hx-swap="innerHTML" hx-indicator="#analyze-spinner">
-                                Structure
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline-info" hx-post="/api/analyze/contextual"
-                                hx-include="#plain-text-input, select[name='essay_type']" hx-target="#feedback-panel"
-                                hx-swap="innerHTML" hx-indicator="#analyze-spinner">
-                                Context
-                            </button>
+        <div class="col-lg-4 feedback-sticky">
+            <div class="feedback-card">
+                <div class="card-body p-4">
+
+                    <div class="feedback-header mb-1">
+                        <div class="flex-grow-1">
+                            <div class="feedback-title">Penman feedback</div>
                         </div>
+                        <span id="feedback-score" class="feedback-score placeholder-glow d-none">
+                            <span id="feedback-score-value">—</span><span class="score-total">/100</span>
+                        </span>
                     </div>
 
+                    <ul class="nav nav-pills feedback-tabs mt-3 mb-4" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" data-feedback-tab type="button"
+                                hx-post="/api/analyze/grammar" hx-include="#plain-text-input"
+                                hx-target="#feedback-panel" hx-swap="innerHTML"
+                                hx-indicator="#analyze-spinner" role="tab" aria-selected="true">
+                                Grammar <span class="tab-count" id="grammar-tab-count" style="display:none;">0</span>
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" data-feedback-tab type="button"
+                                hx-post="/api/analyze/structure"
+                                hx-include="#plain-text-input, #essay-type-select"
+                                hx-target="#feedback-panel" hx-swap="innerHTML"
+                                hx-indicator="#analyze-spinner" role="tab" aria-selected="false">
+                                Structure
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" data-feedback-tab type="button"
+                                hx-post="/api/analyze/contextual"
+                                hx-include="#plain-text-input, #essay-type-select"
+                                hx-target="#feedback-panel" hx-swap="innerHTML"
+                                hx-indicator="#analyze-spinner" role="tab" aria-selected="false">
+                                Context
+                            </button>
+                        </li>
+                    </ul>
+
                     <div id="analyze-spinner" class="htmx-indicator text-center py-3">
-                        <div class="spinner-border text-primary" role="status"></div>
-                        <div class="small text-muted mt-2">
-                            Analyzing your essay — this can take 10–20 seconds...
-                        </div>
+                        <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                        <div class="small text-muted mt-2">Analyzing your essay — this can take 10–20 seconds...</div>
                     </div>
 
                     <div id="feedback-panel">
-                        <p class="text-muted small mb-0">
-                            Click <strong>Grammar</strong> to check spelling & punctuation, or
-                            <strong>Structure</strong> to evaluate introduction, body, conclusion, flow, and tone.
-                        </p>
+                        <div class="empty-state py-5">
+                            <div class="mb-1">Click <strong>Grammar</strong> to check spelling &amp; punctuation, or
+                                <strong>Structure</strong> to evaluate your essay.</div>
+                        </div>
+                    </div>
+
+                    <div class="feedback-footnote mt-4 pt-3 border-top d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-info-circle"></i> Select a suggestion to mark it as resolved</span>
+                        <div class="dropup">
+                            <button class="nav-more-btn" type="button" data-bs-toggle="dropdown"
+                                aria-expanded="false" title="More options" aria-label="More options">
+                                <i class="bi bi-three-dots"></i>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li>
+                                    <button class="dropdown-item" type="button"
+                                        hx-post="/api/analyze/reset"
+                                        hx-include="#essay-type-select"
+                                        hx-target="#baseline-status"
+                                        hx-swap="innerHTML" hx-disabled-elt="this"
+                                        data-confirm-title="Reset writing baseline?"
+                                        hx-confirm="Reset baseline removes the writing-style profile Penman saved for this essay type. Your draft is not deleted — Penman will rebuild the baseline from your next analysis. Continue?"
+                                        title="Delete the saved tone/register baseline for this essay type">
+                                        Reset baseline
+                                    </button>
+                                </li>
+                            </ul>
+                        </div>
+                        <span id="baseline-status" class="visually-hidden" aria-live="polite"
+                            hx-on::afterSwap="setTimeout(function() { this.textContent = ''; }, 3000);"></span>
                     </div>
                 </div>
             </div>
