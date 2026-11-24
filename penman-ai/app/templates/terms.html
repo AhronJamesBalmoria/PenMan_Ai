@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Terms of Service | Penman AI{% endblock %}
+
+{% block content %}
+<div class="container py-5" style="max-width: 760px;">
+    <h1 class="fw-bold mb-3">Terms of Service</h1>
+    <p class="text-muted small mb-4">Last updated: November 2026</p>
+
+    <h5 class="fw-bold mt-4">Using Penman AI</h5>
+    <p class="text-muted">
+        Penman AI provides writing feedback and suggestions. You are responsible for
+        the work you submit. Do not use the service to generate essays on your behalf
+        or to violate the academic integrity rules of your institution.
+    </p>
+
+    <h5 class="fw-bold mt-4">Academic integrity</h5>
+    <p class="text-muted">
+        This tool is an assistant for grammar and constructive feedback — it never
+        writes essays for you. All submitted work must remain your own. By using
+        Penman AI you agree to review and take responsibility for every suggestion
+        you accept.
+    </p>
+
+    <h5 class="fw-bold mt-4">Third-party services</h5>
+    <p class="text-muted">
+        Feedback is generated using Groq and OpenRouter, and grammar checking uses
+        LanguageTool. Your text is sent to these providers when you request analysis.
+        See the <a href="/privacy">Privacy Policy</a> for details.
+    </p>
+
+    <h5 class="fw-bold mt-4">Accounts</h5>
+    <p class="text-muted">
+        Keep your account credentials secure. You may delete your drafts at any time
+        from the Drafts page. We may change or discontinue the service with notice.
+    </p>
+
+    <p class="mt-4"><a href="/register">← Back to registration</a></p>
+</div>
+{% endblock %}

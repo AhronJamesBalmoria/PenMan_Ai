@@ -46,12 +46,40 @@ async def landing(request: Request):
 
 @router.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request):
-    return templates.TemplateResponse("register.html", {"request": request})
+    error = request.query_params.get("error")
+    return templates.TemplateResponse(
+        "register.html", {"request": request, "error": error}
+    )
 
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request})
+    info = ("Password changed. You can log in now."
+            if request.query_params.get("reset") == "1" else None)
+    error = request.query_params.get("error")
+    return templates.TemplateResponse(
+        "login.html", {"request": request, "info": info, "error": error}
+    )
+
+
+@router.get("/forgot-password", response_class=HTMLResponse)
+async def forgot_password_page(request: Request):
+    return templates.TemplateResponse("forgot_password.html", {"request": request})
+
+
+@router.get("/reset-password", response_class=HTMLResponse)
+async def reset_password_page(request: Request):
+    return templates.TemplateResponse("reset_password.html", {"request": request})
+
+
+@router.get("/privacy", response_class=HTMLResponse)
+async def privacy_page(request: Request):
+    return templates.TemplateResponse("privacy.html", {"request": request})
+
+
+@router.get("/terms", response_class=HTMLResponse)
+async def terms_page(request: Request):
+    return templates.TemplateResponse("terms.html", {"request": request})
 
 
 @router.get("/consent", response_class=HTMLResponse)

@@ -1,4 +1,4 @@
-"""Layer 2: contextual analysis via Gemini (tone, register, intent)."""
+"""Layer 2: contextual analysis via Groq/OpenRouter (tone, register, intent)."""
 from __future__ import annotations
 
 import logging

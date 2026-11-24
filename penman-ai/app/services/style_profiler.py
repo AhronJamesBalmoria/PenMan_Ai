@@ -1,79 +1,60 @@
-"""Adaptive feedback: profile an author's style locally with FastEmbed.
+"""Adaptive feedback: a per-author stylometric baseline, computed in pure Python.
 
-The 384-dimension style vector is produced by BAAI/bge-small-en-v1.5 running on
-ONNX Runtime (~100 MB RSS), not PyTorch (~2 GB). That difference is what lets
-the app run on a free-tier 512 MB cloud instance.
+Writing style is measured with topic-robust features (function-word rates,
+punctuation habits, sentence rhythm) instead of semantic embeddings, so a
+topic change no longer looks like style drift. The profile stores a running
+mean/M2/count (Welford) per author+essay type; no old essays are re-read.
 """
 from __future__ import annotations
 
 import asyncio
-import json
+import hashlib
 import logging
 import math
-import threading
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastembed import TextEmbedding
-
-from app.config import settings
 from app.constants import DEFAULT_ESSAY_TYPE, normalize_essay_type
 from app.db.supabase_client import get_supabase_with_token
-
-# Uses the Groq/OpenRouter fallback chain
-from app.services.gemini import generate_json
+from app.services.gemini import generate_json  # Groq/OpenRouter fallback chain
+from app.services.stylometry import FEATURE_NAMES, style_features
 
 logger = logging.getLogger(__name__)
 
-# BGE-small uses 384 dimensions.
-EMBEDDING_DIMENSIONS = 384
-EMBEDDING_MODEL_NAME = "BAAI/bge-small-en-v1.5"
 MIN_PROFILE_CHARS = 100
-MAX_TEXT_CHARS = 20_000
 
-# BGE is sensitive to topic as well as style. The threshold is intentionally
-# sensitive to content changes; override it with STYLE_DRIFT_THRESHOLD when tuning.
-DRIFT_THRESHOLD = settings.STYLE_DRIFT_THRESHOLD
+# Drift rule (named constants so tuning is obvious):
+Z_THRESHOLD = 2.5          # a feature must be this many std devs from the mean
+MIN_DRIFT_FEATURES = 2     # ...and at least this many features must breach
+MIN_HISTORY_ESSAYS = 3     # no drift verdict before this many prior essays
+STD_FLOOR = 0.01           # absolute floor on std to avoid early-variance blowups
+STD_RELATIVE_FLOOR = 0.10  # ...plus a floor relative to the feature mean
+
+PROFILE_TABLE = "author_profiles"
+
+# The 5-minute throttle now gates only the tone/register LLM call, not the
+# cheap local stylometric update.
+LLM_REFRESH_INTERVAL = timedelta(minutes=5)
+
+
+def _profile_is_fresh(profile: dict | None) -> bool:
+    """True when the saved tone/register was written within the throttle window."""
+    if not profile:
+        return False
+    raw = profile.get("updated_at")
+    if not raw:
+        return False
+    try:
+        updated = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return False
+    if updated.tzinfo is None:
+        updated = updated.replace(tzinfo=UTC)
+    return datetime.now(UTC) - updated < LLM_REFRESH_INTERVAL
 
 
 class StyleProfileError(RuntimeError):
     pass
-
-
-# The model is created on first use, not at import time: it costs ~130 MB of
-# disk on first download and is pointless work for processes that never embed
-# (tests, CLI helpers). The lock keeps two concurrent first requests from
-# loading the model twice.
-_embedder: TextEmbedding | None = None
-_embedder_lock = threading.Lock()
-
-
-def _get_embedder() -> TextEmbedding:
-    """Return the process-wide FastEmbed model, building it once (thread-safe)."""
-    global _embedder
-    if _embedder is not None:
-        return _embedder
-
-    with _embedder_lock:
-        if _embedder is None:
-            logger.info(
-                "Loading FastEmbed model (%s)...", EMBEDDING_MODEL_NAME)
-            _embedder = TextEmbedding(model_name=EMBEDDING_MODEL_NAME)
-            logger.info("FastEmbed model loaded.")
-    return _embedder
-
-
-def warm_up_embedder() -> bool:
-    """Load the model ahead of the first request. Never raises."""
-    try:
-        _get_embedder()
-        return True
-    except Exception:
-        logger.warning(
-            "Could not warm up the embedding model; the first analysis will "
-            "retry.",
-            exc_info=True,
-        )
-        return False
 
 
 def _as_float(value, default: float) -> float:
@@ -88,53 +69,9 @@ def _clean_label(value, default: str) -> str:
     return text[:40] or default
 
 
-def _vector_literal(values: list[float]) -> str:
-    """Serialize floats as pgvector's text literal, e.g. ``[0.1,-0.2]``."""
-    return "[" + ",".join(str(float(v)) for v in values) + "]"
-
-
-def _parse_embedding(value: Any) -> list[float]:
-    """Normalise a pgvector value returned by PostgREST into ``list[float]``.
-
-    Supabase can return the column as a JSON-ish string (``"[0.1,0.2]"``), a
-    Postgres array string (``"{0.1,0.2}"``), or an already-decoded list. Older
-    deployments even stored 3072-dimension Gemini vectors, so callers must
-    check the length before doing any math.
-    """
-    if value is None:
-        raise ValueError("embedding is None")
-
-    if isinstance(value, str):
-        text = value.strip()
-        if not text:
-            raise ValueError("embedding string is empty")
-        try:
-            value = json.loads(text)
-        except (json.JSONDecodeError, ValueError):
-            # Postgres array literal: {0.1,0.2,...}
-            parts = text.strip("{}[]").split(",")
-            value = [part for part in parts if part.strip()]
-
-    if isinstance(value, dict):
-        for key in ("embedding", "style_embedding", "vector", "values"):
-            if key in value:
-                return _parse_embedding(value[key])
-        raise ValueError("embedding object has no vector field")
-
-    if not isinstance(value, (list, tuple)):
-        raise ValueError(
-            f"unsupported embedding type: {type(value).__name__}"
-        )
-
-    try:
-        values = [float(item) for item in value]
-    except (TypeError, ValueError) as exc:
-        raise ValueError(
-            f"embedding contains non-numeric values: {exc}") from exc
-
-    if any(not math.isfinite(item) for item in values):
-        raise ValueError("embedding contains non-finite values")
-    return values
+def _content_hash(text: str) -> str:
+    """Stable hash of an essay, used to avoid double-counting the same text."""
+    return hashlib.sha256((text or "").strip().encode("utf-8")).hexdigest()
 
 
 async def _extract_metrics(text: str) -> dict:
@@ -152,52 +89,119 @@ async def _extract_metrics(text: str) -> dict:
         f"{text[:10000]}\n"
         "</text>"
     )
-
     parsed, model_used, error = await generate_json(prompt, temperature=0.0)
-
     if error:
         raise StyleProfileError(f"All AI models failed: {error}")
-
     if not isinstance(parsed, dict):
         raise StyleProfileError("AI response was not a JSON object.")
-
     logger.info("[style_profile] metrics extracted using %s", model_used)
     return parsed
 
 
-def _generate_embedding(text: str) -> list[float]:
-    """Generate the 384-dimension vector LOCALLY with FastEmbed (ONNX).
-
-    This function blocks: callers running on the event loop must use
-    :func:`_generate_embedding_async` so one long essay cannot stall every
-    other request.
-    """
-    stripped = (text or "").strip()
-    if not stripped:
-        raise StyleProfileError("Cannot embed empty text.")
-
+def _as_float_list(value: Any, size: int) -> list[float] | None:
+    """Parse a jsonb/float8[] column into a fixed-size float list."""
+    if not isinstance(value, (list, tuple)) or len(value) != size:
+        return None
     try:
-        batch = list(_get_embedder().embed([stripped[:MAX_TEXT_CHARS]]))
-    except Exception as exc:
-        raise StyleProfileError(f"Local embedding failed: {exc}") from exc
-
-    if not batch:
-        raise StyleProfileError("Embedding model returned no vectors.")
-
-    encoded = batch[0]
-    values = encoded.tolist() if hasattr(encoded, "tolist") else list(encoded)
-
-    if len(values) != EMBEDDING_DIMENSIONS:
-        raise StyleProfileError(
-            f"Embedding model returned {len(values)} dimensions; "
-            f"expected {EMBEDDING_DIMENSIONS}."
-        )
-    return values
+        return [float(item) for item in value]
+    except (TypeError, ValueError):
+        return None
 
 
-async def _generate_embedding_async(text: str) -> list[float]:
-    """Run the CPU-bound ONNX inference in a worker thread."""
-    return await asyncio.to_thread(_generate_embedding, text)
+def _welford_update(
+    mean: list[float], m2: list[float], count: int, sample: list[float]
+) -> tuple[list[float], list[float], int]:
+    """Fold one sample into a running mean/M2 and return the new state."""
+    new_count = count + 1
+    new_mean, new_m2 = [], []
+    for old_mean, old_m2, value in zip(mean, m2, sample, strict=True):
+        delta = value - old_mean
+        updated_mean = old_mean + delta / new_count
+        updated_m2 = old_m2 + delta * (value - updated_mean)
+        new_mean.append(updated_mean)
+        new_m2.append(updated_m2)
+    return new_mean, new_m2, new_count
+
+
+def _effective_std(std: float, mean: float) -> float:
+    return max(std, abs(mean) * STD_RELATIVE_FLOOR, STD_FLOOR)
+
+
+# Friendly labels for the punctuation/contraction "use" features.
+_USAGE_LABELS = {
+    "comma use": "commas",
+    "semicolon use": "semicolons",
+    "colon use": "colons",
+    "dash use": "dashes",
+    "parenthesis use": "parentheses",
+    "exclamation use": "exclamation marks",
+    "question use": "question marks",
+    "contraction use": "contractions",
+}
+
+
+def _frequency_phrase(mean: float, difference: float) -> str:
+    """Natural language for a change in a per-word rate."""
+    if abs(mean) < 1e-6:
+        # Baseline rarely/never used it: describe the new presence directly.
+        return "far more often than usual" if difference > 0 else "much less often than usual"
+    pct = round(abs(difference) / mean * 100)
+    if pct < 5:
+        return "about the same as usual"
+    return (f"about {pct}% more often than usual" if difference > 0
+            else f"about {pct}% less often than usual")
+
+
+def _describe_change(name: str, mean: float, value: float) -> str:
+    """Turn one shifted feature into a short, human-readable sentence."""
+    difference = value - mean
+    if abs(difference) < 1e-9:
+        return ""
+
+    # Sentence rhythm.
+    if name == "average sentence length" and mean > 0:
+        pct = round(abs(difference) / mean * 100)
+        if pct < 5:
+            return ""
+        return ("your sentences are about %d%% shorter than usual" % pct
+                if difference < 0
+                else "your sentences are about %d%% longer than usual" % pct)
+    if name == "sentence length variation":
+        return ("your sentences are more uniform in length than usual"
+                if difference < 0
+                else "your sentences vary more in length than usual")
+    if name == "average word length":
+        pct = round(abs(difference) / mean * 100) if mean > 1e-9 else 0
+        if pct < 5:
+            return ""
+        return ("your words are about %d%% longer than usual" % pct
+                if difference > 0
+                else "your words are about %d%% shorter than usual" % pct)
+    if name == "vocabulary richness":
+        return ("your vocabulary is more varied than usual"
+                if difference > 0
+                else "your vocabulary is more repetitive than usual")
+    if name == "average paragraph length":
+        pct = round(abs(difference) / mean * 100) if mean > 1e-9 else 0
+        if pct < 5:
+            return ""
+        return ("your paragraphs are about %d%% longer than usual" % pct
+                if difference > 0
+                else "your paragraphs are about %d%% shorter than usual" % pct)
+
+    # Punctuation / contraction rates.
+    if name in _USAGE_LABELS:
+        label = _USAGE_LABELS[name]
+        phrase = _frequency_phrase(mean, difference)
+        if phrase == "about the same as usual":
+            return ""
+        return f"you use {label} {phrase}"
+
+    # Function words: name is the bare word (e.g. "the", "however").
+    phrase = _frequency_phrase(mean, difference)
+    if phrase == "about the same as usual":
+        return ""
+    return f'"{name}" shows up {phrase} in your writing'
 
 
 async def update_user_style_profile(
@@ -228,34 +232,10 @@ async def update_user_style_profile(
         )
         return {"error": "Text too short to extract a reliable style profile."}
 
-    # 1. Try to get metrics (Tone/Register). If it fails, use fallbacks.
-    metrics_failed = False
-    try:
-        metrics = await _extract_metrics(stripped)
-    except Exception as exc:
-        logger.error(
-            "[style_profile] metric extraction failed (%s). Using fallback "
-            "values.",
-            exc,
-        )
-        metrics_failed = True
-        metrics = {
-            "tone": "neutral",
-            "register": "standard",
-            "avg_sentence_length": 15.0,
-            "vocabulary_richness": 0.5,
-        }
-
-    # 2. Generate Local Embedding (this should always succeed; it is local).
-    try:
-        embedding = await _generate_embedding_async(stripped)
-        logger.info(
-            "[style_profile] local embedding ready: %d dimensions",
-            len(embedding),
-        )
-    except Exception as exc:
-        logger.exception("[style_profile] local embedding failed: %s", exc)
-        return {"error": f"Could not generate embedding: {exc}"}
+    # 1. Compute stylometric features locally (CPU-bound; off the event loop).
+    sample = await asyncio.to_thread(style_features, stripped)
+    current_hash = _content_hash(stripped)
+    logger.info("[style_profile] stylometric features: %d", len(sample))
 
     try:
         client = get_supabase_with_token(access_token)
@@ -263,50 +243,90 @@ async def update_user_style_profile(
         logger.exception("[style_profile] Supabase client failed: %s", exc)
         return {"error": f"Failed to connect to Supabase: {exc}"}
 
-    # Keep an existing tone/register if the AI chain is temporarily down; a
-    # transient 429 must not overwrite a good profile with neutral/standard.
-    if metrics_failed:
-        try:
-            response = (
-                client.table("author_profiles")
-                .select("tone, register")
-                .eq("user_id", user_id)
-                .eq("essay_type", persona)
-                .execute()
-            )
-            if response.data:
-                existing = response.data[0] or {}
-                metrics["tone"] = existing.get("tone") or metrics["tone"]
-                metrics["register"] = (
-                    existing.get("register") or metrics["register"]
-                )
-        except Exception as exc:
-            logger.warning(
-                "[style_profile] could not read existing profile for %s: %s",
-                user_id,
-                exc,
-            )
-        logger.info(
-            "[style_profile] fallback tone=%s register=%s",
-            metrics["tone"],
-            metrics["register"],
+    # 2. Read the existing profile once: running stats, last hash, tone/register,
+    #    and whether the 5-minute LLM throttle is still active.
+    prior_row: dict = {}
+    try:
+        prior = (
+            client.table(PROFILE_TABLE)
+            .select("feature_mean, feature_m2, essay_count, last_content_hash, "
+                    "tone, register, updated_at")
+            .eq("user_id", user_id)
+            .eq("essay_type", persona)
+            .execute()
+        )
+        rows = getattr(prior, "data", None) or []
+        if rows:
+            prior_row = rows[0] or {}
+    except Exception as exc:
+        logger.warning(
+            "[style_profile] could not read existing profile for %s: %s",
+            user_id,
+            exc,
         )
 
-    # 3. Save to Database. The composite key keeps one baseline per persona.
+    # 3. Tone/register extraction is rate-limited (Groq/OpenRouter): throttle it
+    #    and reuse the saved values when recent. The Welford update below is
+    #    always allowed, so history builds on every distinct essay.
+    llm_fresh = _profile_is_fresh(prior_row)
+    metrics: dict = {}
+    if not llm_fresh:
+        try:
+            metrics = await _extract_metrics(stripped)
+        except Exception as exc:
+            logger.error(
+                "[style_profile] metric extraction failed (%s). Using saved/fallback.",
+                exc,
+            )
+    if not metrics:
+        metrics = {
+            "tone": prior_row.get("tone") or "neutral",
+            "register": prior_row.get("register") or "standard",
+        }
+    else:
+        # A transient failure must not wipe a good saved tone/register.
+        if not metrics.get("tone"):
+            metrics["tone"] = prior_row.get("tone") or "neutral"
+        if not metrics.get("register"):
+            metrics["register"] = prior_row.get("register") or "standard"
+
+    # 4. Update the running mean/M2/count (Welford) unless this exact essay was
+    #    already folded in — clicking Analyze twice on one text must not inflate
+    #    the count or bias the mean.
+    size = len(sample)
+    mean = _as_float_list(prior_row.get("feature_mean"), size) or [0.0] * size
+    m2 = _as_float_list(prior_row.get("feature_m2"), size) or [0.0] * size
+    count = max(0, int(prior_row.get("essay_count") or 0))
+    last_hash = prior_row.get("last_content_hash")
+
+    if last_hash == current_hash:
+        logger.info(
+            "[style_profile] duplicate essay skipped: user=%s persona=%s essays=%d",
+            user_id,
+            persona,
+            count,
+        )
+    else:
+        mean, m2, count = _welford_update(mean, m2, count, sample)
+        last_hash = current_hash
+
     profile_data = {
         "user_id": user_id,
         "essay_type": persona,
         "tone": _clean_label(metrics.get("tone"), "neutral"),
         "register": _clean_label(metrics.get("register"), "standard"),
-        "avg_sentence_length": _as_float(
-            metrics.get("avg_sentence_length"), 15.0),
-        "vocabulary_richness": _as_float(
-            metrics.get("vocabulary_richness"), 0.5),
-        "style_embedding": _vector_literal(embedding),
+        "avg_sentence_length": _as_float(metrics.get("avg_sentence_length"),
+                                         sample[0]),
+        "vocabulary_richness": _as_float(metrics.get("vocabulary_richness"),
+                                         sample[3]),
+        "feature_mean": mean,
+        "feature_m2": m2,
+        "essay_count": count,
+        "last_content_hash": last_hash,
     }
 
     try:
-        response = client.table("author_profiles").upsert(
+        response = client.table(PROFILE_TABLE).upsert(
             profile_data, on_conflict="user_id,essay_type"
         ).execute()
     except Exception as exc:
@@ -315,30 +335,16 @@ async def update_user_style_profile(
 
     rows = len(getattr(response, "data", None) or [])
     logger.info(
-        "[style_profile] saved: user=%s persona=%s tone=%s register=%s rows=%d",
+        "[style_profile] saved: user=%s persona=%s tone=%s register=%s "
+        "essays=%d rows=%d",
         user_id,
         persona,
         profile_data["tone"],
         profile_data["register"],
+        count,
         rows,
     )
     return {"success": True, "profile": profile_data}
-
-
-def _cosine_similarity(vec1: list[float], vec2: list[float]) -> float:
-    """Calculate the cosine similarity between two equal-length vectors."""
-    if len(vec1) != len(vec2):
-        raise ValueError(
-            f"vector dimensions differ: {len(vec1)} vs {len(vec2)}")
-    if not vec1:
-        raise ValueError("vectors are empty")
-
-    dot_product = math.fsum(a * b for a, b in zip(vec1, vec2, strict=True))
-    magnitude1 = math.sqrt(math.fsum(a * a for a in vec1))
-    magnitude2 = math.sqrt(math.fsum(b * b for b in vec2))
-    if magnitude1 == 0 or magnitude2 == 0:
-        return 0.0
-    return dot_product / (magnitude1 * magnitude2)
 
 
 async def check_style_drift(
@@ -350,101 +356,70 @@ async def check_style_drift(
     """Compare the current text against the saved baseline for its persona."""
     persona = normalize_essay_type(essay_type)
     text = (current_text or "").strip()
-    logger.info(
-        "[style_drift] start user=%s persona=%s chars=%d threshold=%.2f",
-        user_id,
-        persona,
-        len(text),
-        DRIFT_THRESHOLD,
-    )
 
     try:
         saved_profile = (
-            supabase_client.table("author_profiles")
-            .select("style_embedding, tone")
+            supabase_client.table(PROFILE_TABLE)
+            .select("feature_mean, feature_m2, essay_count, tone")
             .eq("user_id", user_id)
             .eq("essay_type", persona)
             .execute()
         )
         rows = getattr(saved_profile, "data", None) or []
-        logger.info("[style_drift] query returned %d row(s)", len(rows))
-
         if not rows:
-            logger.info(
-                "[style_drift] skipped: no profile for user=%s persona=%s",
-                user_id,
-                persona,
-            )
             return {"error": "No saved profile for this persona"}
-
-        if not rows[0].get("style_embedding"):
-            logger.info(
-                "[style_drift] skipped: no embedding for user=%s persona=%s",
-                user_id,
-                persona,
-            )
-            return {"error": "No saved style embedding for this persona."}
-
-        profile = rows[0]
-        raw_embedding = profile["style_embedding"]
+        profile = rows[0] or {}
         saved_tone = profile.get("tone") or "unknown"
 
-        logger.info(
-            "[style_drift] stored embedding type=%s",
-            type(raw_embedding).__name__,
-        )
-        try:
-            saved_embedding = _parse_embedding(raw_embedding)
-        except ValueError as exc:
-            logger.warning(
-                "[style_drift] could not parse stored embedding for %s: %s",
+        mean = _as_float_list(profile.get("feature_mean"), len(FEATURE_NAMES))
+        m2 = _as_float_list(profile.get("feature_m2"), len(FEATURE_NAMES))
+        count = max(0, int(profile.get("essay_count") or 0))
+        if mean is None or m2 is None or count < MIN_HISTORY_ESSAYS:
+            logger.info(
+                "[style_drift] not enough history: user=%s persona=%s essays=%d",
                 user_id,
-                exc,
+                persona,
+                count,
             )
-            return {"error": f"Could not parse saved style embedding: {exc}"}
-
-        logger.info(
-            "[style_drift] saved embedding dim=%d", len(saved_embedding))
-
-        if len(saved_embedding) != EMBEDDING_DIMENSIONS:
-            message = (
-                f"Saved style embedding has {len(saved_embedding)} dimensions; "
-                f"expected {EMBEDDING_DIMENSIONS}. Please rebuild the profile."
-            )
-            logger.warning("[style_drift] %s (user=%s)", message, user_id)
             return {
-                "error": message,
-                "needs_rebuild": True,
+                "is_drastic": False,
+                "error": None,
+                "reason": "not enough history",
+                "changes": [],
                 "saved_tone": saved_tone,
             }
 
-        new_embedding = await _generate_embedding_async(text)
-        logger.info(
-            "[style_drift] current embedding dim=%d", len(new_embedding))
+        sample = await asyncio.to_thread(style_features, text)
+        z_scores = []
+        for index, value in enumerate(sample):
+            variance = m2[index] / (count - 1)
+            std = math.sqrt(max(0.0, variance))
+            z_scores.append(abs(value - mean[index]) / _effective_std(std, mean[index]))
 
-        similarity = _cosine_similarity(saved_embedding, new_embedding)
-        is_drastic = similarity < DRIFT_THRESHOLD
+        breaching = [i for i, z in enumerate(z_scores) if z >= Z_THRESHOLD]
+        is_drastic = len(breaching) >= MIN_DRIFT_FEATURES
+        top = sorted(breaching, key=lambda i: z_scores[i], reverse=True)[:3]
+        changes = [_describe_change(FEATURE_NAMES[i], mean[i], sample[i])
+                   for i in top]
 
         logger.info(
-            "[style_drift] result user=%s persona=%s similarity=%.4f "
-            "threshold=%.2f drastic=%s saved_tone=%s",
+            "[style_drift] result user=%s persona=%s essays=%d breaching=%d "
+            "drastic=%s saved_tone=%s",
             user_id,
             persona,
-            similarity,
-            DRIFT_THRESHOLD,
+            count,
+            len(breaching),
             is_drastic,
             saved_tone,
         )
-
         return {
-            "similarity": round(similarity, 4),
-            "similarity_raw": similarity,
-            "threshold": DRIFT_THRESHOLD,
             "is_drastic": is_drastic,
             "saved_tone": saved_tone,
             "error": None,
+            "changes": changes,
+            "z_scores": [round(z, 2) for z in z_scores],
+            "threshold": Z_THRESHOLD,
         }
-
     except Exception as exc:
         logger.exception("[style_drift] failed for %s: %s", user_id, exc)
         return {"error": f"Failed to check style drift: {exc}"}

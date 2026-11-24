@@ -1,4 +1,4 @@
-"""Layer 2: structural analysis via Gemini."""
+"""Layer 2: structural analysis via Groq/OpenRouter."""
 from __future__ import annotations
 
 import logging

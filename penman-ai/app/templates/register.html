@@ -2,39 +2,49 @@
 {% block title %}Register | Penman AI{% endblock %}
 
 {% block content %}
-<div class="container py-5" style="max-width: 480px;">
-    <div class="card shadow-sm">
-        <div class="card-body p-4">
-            <h3 class="mb-3">Create your account</h3>
+<div class="auth-page">
+    <div class="auth-card">
+        <h1 class="auth-title">Create your account</h1>
+        <p class="auth-subtitle">Start improving your writing in just a few minutes.</p>
 
-            {% if error %}
-            <div class="alert alert-danger">{{ error }}</div>
-            {% endif %}
-            {% if info %}
-            <div class="alert alert-info">{{ info }}</div>
-            {% endif %}
+        {% if error %}
+        <div class="alert alert-danger small">{{ error }}</div>
+        {% endif %}
+        {% if info %}
+        <div class="alert alert-info small">{{ info }}</div>
+        {% endif %}
 
-            <form action="/auth/register" method="post">
-                <div class="mb-3">
-                    <label class="form-label">Display Name</label>
-                    <input type="text" name="display_name" class="form-control" placeholder="Juan Dela Cruz">
+        <form action="/auth/register" method="post" novalidate>
+            <div class="mb-3">
+                <label class="auth-label" for="display_name">Username</label>
+                <input type="text" name="display_name" id="display_name" class="auth-input" placeholder="Your username">
+            </div>
+            <div class="mb-3">
+                <label class="auth-label" for="email">Email address</label>
+                <input type="email" name="email" id="email" class="auth-input" placeholder="you@example.com" required>
+            </div>
+            <div class="mb-3">
+                <label class="auth-label" for="password">Password</label>
+                <div class="auth-password-wrap">
+                    <input type="password" name="password" id="password" class="auth-input"
+                        placeholder="At least 8 characters" minlength="8" required>
+                    <button type="button" class="password-toggle" data-password-toggle aria-label="Show password">
+                        <i class="bi bi-eye"></i>
+                    </button>
                 </div>
-                <div class="mb-3">
-                    <label class="form-label">Email</label>
-                    <input type="email" name="email" class="form-control" required>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Password</label>
-                    <input type="password" name="password" class="form-control" minlength="6" required>
-                    <div class="form-text">At least 6 characters.</div>
-                </div>
-                <button class="btn btn-primary w-100" type="submit">Register</button>
-            </form>
+            </div>
+            <label class="auth-check">
+                <input type="checkbox" name="terms_agreed" required>
+                <span>I agree to the <a href="/terms">Terms of Service</a> and <a href="/privacy">Privacy Policy</a></span>
+            </label>
+            <button class="auth-btn" type="submit">Create account</button>
+        </form>
 
-            <p class="text-center mt-3 mb-0 small">
-                Already have an account? <a href="/login">Login</a>
-            </p>
-        </div>
+        <p class="auth-footnote">Already have an account? <a href="/login">Log in</a></p>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/auth.js"></script>
 {% endblock %}

@@ -409,7 +409,8 @@ def test_short_text_does_not_schedule_profile_update(
 def test_saved_profile_is_injected_and_throttled(
     client, fake_db, monkeypatch, scheduled_profile_updates
 ):
-    """A profile saved minutes ago feeds the prompt but is not re-embedded."""
+    """A recent profile feeds the prompt; the cheap Welford update still runs
+    (LLM throttling now happens inside the style profiler)."""
     fake_db.profiles["p1"] = {
         "id": "p1",
         "user_id": USER_ID,
@@ -439,7 +440,7 @@ def test_saved_profile_is_injected_and_throttled(
 
     assert response.status_code == 200
     assert captured["user_profile"]["tone"] == "reflective"
-    assert scheduled_profile_updates == []
+    assert len(scheduled_profile_updates) == 1
 
 
 def test_profile_throttle_is_scoped_to_persona(
@@ -534,8 +535,9 @@ def test_analysis_rejects_oversized_input(client, monkeypatch):
 
 
 def test_update_user_style_profile_upserts_with_fresh_client(monkeypatch, fake_db):
-    """The task must build its own client from the token and write a 384-dim vector."""
+    """The task builds its own client and writes running stylometric stats."""
     from app.services import style_profiler
+    from app.services.stylometry import FEATURE_COUNT
 
     async def fake_metrics(text):
         return {
@@ -545,12 +547,7 @@ def test_update_user_style_profile_upserts_with_fresh_client(monkeypatch, fake_d
             "vocabulary_richness": 0.6,
         }
 
-    def fake_embedding(text):
-        return [0.5] * 384
-
     monkeypatch.setattr(style_profiler, "_extract_metrics", fake_metrics)
-    monkeypatch.setattr(style_profiler, "_generate_embedding", fake_embedding)
-
     created = {}
 
     def fake_client(token):
@@ -572,7 +569,9 @@ def test_update_user_style_profile_upserts_with_fresh_client(monkeypatch, fake_d
     assert row["user_id"] == USER_ID
     assert row["essay_type"] == "creative"
     assert row["tone"] == "bold"
-    assert row["style_embedding"].startswith("[0.5,")
+    assert row["essay_count"] == 1
+    assert len(row["feature_mean"]) == FEATURE_COUNT
+    assert len(row["feature_m2"]) == FEATURE_COUNT
 
 
 def test_update_user_style_profile_keeps_one_row_per_persona(
@@ -584,9 +583,6 @@ def test_update_user_style_profile_keeps_one_row_per_persona(
         return {"tone": "bold", "register": "formal"}
 
     monkeypatch.setattr(style_profiler, "_extract_metrics", fake_metrics)
-    monkeypatch.setattr(
-        style_profiler, "_generate_embedding", lambda text: [0.5] * 384
-    )
     monkeypatch.setattr(
         style_profiler, "get_supabase_with_token", lambda token: fake_db
     )
@@ -605,20 +601,26 @@ def test_update_user_style_profile_keeps_one_row_per_persona(
     } == {"creative", "expository"}
 
 
-def test_update_user_style_profile_reports_embedding_failure(monkeypatch, fake_db):
-    """A local embedding failure must surface as a clear error, not a silent no-op."""
+def test_update_user_style_profile_uses_fallback_tone_when_metrics_fail(
+    monkeypatch, fake_db
+):
+    """A failed AI call must not overwrite a saved tone/register."""
     from app.services import style_profiler
 
-    async def fake_metrics(text):
-        return {"tone": "bold", "register": "formal"}
+    async def failing_metrics(text):
+        raise style_profiler.StyleProfileError("All AI models failed: HTTP 429")
 
-    def failing_embedding(text):
-        raise style_profiler.StyleProfileError(
-            "embedding failed after 3 attempts: HTTP 429: quota exceeded"
-        )
-
-    monkeypatch.setattr(style_profiler, "_extract_metrics", fake_metrics)
-    monkeypatch.setattr(style_profiler, "_generate_embedding", failing_embedding)
+    monkeypatch.setattr(style_profiler, "_extract_metrics", failing_metrics)
+    monkeypatch.setattr(
+        style_profiler, "get_supabase_with_token", lambda token: fake_db
+    )
+    fake_db.profiles["p1"] = {
+        "id": "p1",
+        "user_id": USER_ID,
+        "essay_type": "expository",
+        "tone": "formal",
+        "register": "academic",
+    }
 
     result = asyncio.run(
         style_profiler.update_user_style_profile(
@@ -626,8 +628,10 @@ def test_update_user_style_profile_reports_embedding_failure(monkeypatch, fake_d
         )
     )
 
-    assert "429" in result["error"]
-    assert fake_db.profiles == {}
+    assert result["success"] is True
+    row = next(iter(fake_db.profiles.values()))
+    assert row["tone"] == "formal"
+    assert row["register"] == "academic"
 
 
 def test_structure_partial_renders_drift_warning_on_success():
@@ -791,15 +795,18 @@ def test_structure_route_detects_formal_to_casual_drift(
         "grab food or something idk. my day was so mid honestly."
     )
 
+    from app.services.stylometry import FEATURE_COUNT, style_features
+
+    baseline = style_features(formal)
     fake_db.profiles["p1"] = {
         "id": "p1",
         "user_id": USER_ID,
         "essay_type": "expository",
         "tone": "formal",
         "register": "academic",
-        "style_embedding": style_profiler._vector_literal(
-            style_profiler._generate_embedding(formal)
-        ),
+        "feature_mean": baseline,
+        "feature_m2": [0.02] * FEATURE_COUNT,
+        "essay_count": 10,
     }
 
     async def fake_structure(text, essay_type, user_profile=None):
@@ -859,40 +866,6 @@ def test_structure_route_uses_persona_for_drift_and_profile_update(
     assert scheduled_profile_updates[0]["essay_type"] == "creative"
 
 
-def test_parse_embedding_accepts_json_and_postgres_array():
-    from app.services import style_profiler
-
-    assert style_profiler._parse_embedding("[0.1, 0.2]") == [0.1, 0.2]
-    assert style_profiler._parse_embedding("{0.1,0.2}") == [0.1, 0.2]
-    assert style_profiler._parse_embedding([1, 2]) == [1.0, 2.0]
-
-
-def test_check_style_drift_parses_string_embedding(monkeypatch, fake_db):
-    from app.services import style_profiler
-
-    fake_db.profiles["p1"] = {
-        "id": "p1",
-        "user_id": USER_ID,
-        "essay_type": "expository",
-        "tone": "formal",
-        "style_embedding": "[" + ",".join(["1.0"] * 384) + "]",
-    }
-    monkeypatch.setattr(
-        style_profiler, "_generate_embedding", lambda text: [1.0] * 384
-    )
-
-    result = asyncio.run(
-        style_profiler.check_style_drift(
-            USER_ID, "word " * 40, "expository", fake_db
-        )
-    )
-
-    assert result["error"] is None
-    assert result["similarity"] == 1.0
-    assert result["is_drastic"] is False
-    assert result["saved_tone"] == "formal"
-
-
 def test_check_style_drift_skips_missing_persona(monkeypatch, fake_db):
     from app.services import style_profiler
 
@@ -901,15 +874,8 @@ def test_check_style_drift_skips_missing_persona(monkeypatch, fake_db):
         "user_id": USER_ID,
         "essay_type": "creative",
         "tone": "informal",
-        "style_embedding": [0.5] * 384,
+        "feature_mean": [0.0] * 10,
     }
-
-    def fail_embedding(text):
-        raise AssertionError(
-            "should not embed when the persona has no saved profile"
-        )
-
-    monkeypatch.setattr(style_profiler, "_generate_embedding", fail_embedding)
 
     result = asyncio.run(
         style_profiler.check_style_drift(
@@ -920,57 +886,18 @@ def test_check_style_drift_skips_missing_persona(monkeypatch, fake_db):
     assert result["error"] == "No saved profile for this persona"
 
 
-def test_check_style_drift_selects_the_requested_persona(
-    monkeypatch, fake_db
-):
+def test_check_style_drift_returns_not_enough_history(fake_db):
     from app.services import style_profiler
-
-    formal = [1.0] + [0.0] * 383
-    casual = [0.0, 1.0] + [0.0] * 382
-    fake_db.profiles["p1"] = {
-        "id": "p1",
-        "user_id": USER_ID,
-        "essay_type": "argumentative",
-        "tone": "formal",
-        "style_embedding": style_profiler._vector_literal(formal),
-    }
-    fake_db.profiles["p2"] = {
-        "id": "p2",
-        "user_id": USER_ID,
-        "essay_type": "creative",
-        "tone": "casual",
-        "style_embedding": style_profiler._vector_literal(casual),
-    }
-    monkeypatch.setattr(
-        style_profiler, "_generate_embedding", lambda text: list(formal)
-    )
-
-    match = asyncio.run(
-        style_profiler.check_style_drift(
-            USER_ID, "word " * 40, "argumentative", fake_db
-        )
-    )
-    mismatch = asyncio.run(
-        style_profiler.check_style_drift(
-            USER_ID, "word " * 40, "creative", fake_db
-        )
-    )
-
-    assert match["saved_tone"] == "formal"
-    assert match["is_drastic"] is False
-    assert mismatch["saved_tone"] == "casual"
-    assert mismatch["is_drastic"] is True
-
-
-def test_check_style_drift_rejects_dimension_mismatch(monkeypatch, fake_db):
-    from app.services import style_profiler
+    from app.services.stylometry import FEATURE_COUNT
 
     fake_db.profiles["p1"] = {
         "id": "p1",
         "user_id": USER_ID,
         "essay_type": "expository",
         "tone": "formal",
-        "style_embedding": [0.5] * 3072,
+        "feature_mean": [0.0] * FEATURE_COUNT,
+        "feature_m2": [0.0] * FEATURE_COUNT,
+        "essay_count": 2,
     }
 
     result = asyncio.run(
@@ -979,19 +906,46 @@ def test_check_style_drift_rejects_dimension_mismatch(monkeypatch, fake_db):
         )
     )
 
-    assert "3072" in result["error"]
-    assert result["needs_rebuild"] is True
+    assert result["is_drastic"] is False
+    assert result["reason"] == "not enough history"
+    assert result["changes"] == []
 
 
-def test_cosine_similarity_rejects_mismatched_dimensions():
+def test_check_style_drift_selects_the_requested_persona(fake_db):
     from app.services import style_profiler
+    from app.services.stylometry import FEATURE_COUNT, style_features
 
-    try:
-        style_profiler._cosine_similarity([1.0, 0.0], [1.0])
-    except ValueError as exc:
-        assert "dimensions differ" in str(exc)
-    else:
-        raise AssertionError("expected ValueError")
+    text = "word " * 40
+    features = style_features(text)
+    fake_db.profiles["p1"] = {
+        "id": "p1",
+        "user_id": USER_ID,
+        "essay_type": "argumentative",
+        "tone": "formal",
+        "feature_mean": features,
+        "feature_m2": [0.02] * FEATURE_COUNT,
+        "essay_count": 10,
+    }
+    fake_db.profiles["p2"] = {
+        "id": "p2",
+        "user_id": USER_ID,
+        "essay_type": "creative",
+        "tone": "casual",
+        "feature_mean": features,
+        "feature_m2": [0.02] * FEATURE_COUNT,
+        "essay_count": 10,
+    }
+
+    match = asyncio.run(
+        style_profiler.check_style_drift(USER_ID, text, "argumentative", fake_db)
+    )
+    other = asyncio.run(
+        style_profiler.check_style_drift(USER_ID, text, "creative", fake_db)
+    )
+
+    assert match["saved_tone"] == "formal"
+    assert match["is_drastic"] is False
+    assert other["saved_tone"] == "casual"
 
 
 def test_groq_retries_without_json_mode_on_validation_error(monkeypatch):

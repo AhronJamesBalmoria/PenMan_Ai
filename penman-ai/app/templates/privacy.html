@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Privacy Policy | Penman AI{% endblock %}
+
+{% block content %}
+<div class="container py-5" style="max-width: 760px;">
+    <h1 class="fw-bold mb-3">Privacy Policy</h1>
+    <p class="text-muted small mb-4">Last updated: November 2026</p>
+
+    <h5 class="fw-bold mt-4">How we handle your writing</h5>
+    <p class="text-muted">
+        Your drafts are stored in Supabase and are only accessible to your account.
+        When you request feedback, your text is sent to third-party AI providers
+        (Groq, OpenRouter) for analysis, and to LanguageTool for grammar checking.
+        A style profile (tone, register and stylometric patterns such as sentence
+        rhythm and word-choice habits) is also stored so Penman can flag large
+        changes in your writing voice.
+    </p>
+
+    <h5 class="fw-bold mt-4">What we do not do</h5>
+    <p class="text-muted">
+        We do not use your text to train models. We do not sell your data. Only send
+        text you are comfortable sharing with the services listed above.
+    </p>
+
+    <h5 class="fw-bold mt-4">Academic integrity</h5>
+    <p class="text-muted">
+        Penman AI is an assistant for grammar and feedback. It does not write essays
+        on your behalf. All submitted work must remain your own.
+    </p>
+
+    <h5 class="fw-bold mt-4">Your choices</h5>
+    <p class="text-muted">
+        You can delete any draft from your Drafts page. To remove your style profile,
+        use "Reset baseline" in the feedback panel. To ask about your data, contact
+        the app administrator.
+    </p>
+
+    <p class="mt-4"><a href="/register">← Back to registration</a></p>
+</div>
+{% endblock %}

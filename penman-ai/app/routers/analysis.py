@@ -31,8 +31,8 @@ TOO_LONG = (
     f"Please trim it to {settings.MAX_PLAIN_TEXT_CHARS:,} characters."
 )
 
-# Don't re-embed the same author on every click; embeddings are the most
-# rate-limited call we make (Gemini 429s), so refreshes are throttled.
+# Don't re-profile the same author on every click: tone/register extraction
+# calls Groq/OpenRouter, so refreshes are throttled.
 PROFILE_REFRESH_INTERVAL = timedelta(minutes=5)
 
 # Drift checks need at least this much text to be meaningful.
@@ -144,26 +144,26 @@ async def _drift_warning(
         )
         return None
 
-    similarity = res.get("similarity")
-    threshold = res.get("threshold")
     is_drastic = bool(res.get("is_drastic"))
 
     logger.info(
-        "[%s] drift result user=%s similarity=%s threshold=%s drastic=%s",
+        "[%s] drift result user=%s dramatic=%s threshold=%s changes=%d",
         route_name,
         user_id,
-        similarity,
-        threshold,
         is_drastic,
+        res.get("threshold"),
+        len(res.get("changes") or []),
     )
 
     if not is_drastic:
         return None
 
     saved_tone = res.get("saved_tone") or "saved"
-    return (
-        f"This looks very different from your usual '{saved_tone}' tone."
-    )
+    changes = [c for c in (res.get("changes") or []) if c]
+    warning = f"This looks very different from your usual '{saved_tone}' tone."
+    if changes:
+        warning += " Here's what changed: " + "; ".join(changes) + "."
+    return warning
 
 
 def _schedule_profile_update(
@@ -190,14 +190,9 @@ def _schedule_profile_update(
         )
         return
 
-    if _profile_is_fresh(profile):
-        logger.info(
-            "[%s] profile update skipped: saved less than %s ago",
-            route_name,
-            PROFILE_REFRESH_INTERVAL,
-        )
-        return
-
+    # The stylometric update is pure Python and cheap: run it on every distinct
+    # essay so history builds in real time. The 5-minute throttle now applies
+    # only to the tone/register LLM call inside update_user_style_profile.
     logger.info(
         "[%s] scheduling style profile update: user=%s persona=%s chars=%d",
         route_name,

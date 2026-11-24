@@ -1,40 +1,100 @@
 {% extends "base.html" %}
 {% block title %}Penman AI | Write Better, Keep Your Voice{% endblock %}
 
-{% block content %}
-<div class="container py-5">
-    <div class="text-center mb-5">
-        <h1 class="display-4 fw-bold">Penman AI</h1>
-        <p class="lead text-muted">Write better. Keep your voice.</p>
-        <a href="/register" class="btn btn-primary btn-lg me-2">Get Started</a>
-        <a href="/login" class="btn btn-outline-secondary btn-lg">Login</a>
-    </div>
+{% block footer %}{% endblock %}
 
-    <div class="row g-4">
-        <div class="col-md-4">
-            <div class="card h-100 shadow-sm">
-                <div class="card-body">
-                    <h5 class="card-title">Grammar & Syntax</h5>
-                    <p class="card-text">Catch spelling, grammar, and punctuation errors without losing your style.</p>
+{% block content %}
+<section class="landing-hero">
+    <div class="container-xl">
+        <div class="row align-items-center g-5">
+            <div class="col-lg-6">
+                <h1 class="landing-title">Write better.<br><span class="accent">Keep your voice.</span></h1>
+                <p class="landing-lead">
+                    Get instant feedback on clarity, structure,<br>and evidence as you write
+                </p>
+                <div class="landing-actions">
+                    <a href="/register" class="btn btn-primary btn-lg px-4">Start writing free</a>
+                    <a href="/login" class="btn btn-outline-secondary btn-lg px-4">Log in</a>
                 </div>
             </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card h-100 shadow-sm">
-                <div class="card-body">
-                    <h5 class="card-title">Structural Feedback</h5>
-                    <p class="card-text">Evaluate introduction, body, conclusion, flow, and tone of your essay.</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card h-100 shadow-sm">
-                <div class="card-body">
-                    <h5 class="card-title">Contextual Analysis</h5>
-                    <p class="card-text">Suggestions that respect your essay type, tone, and intent.</p>
+            <div class="col-lg-6">
+                <div class="landing-preview">
+                    <div class="preview-bar">
+                        <span class="preview-dot"></span><span class="preview-dot"></span><span class="preview-dot"></span>
+                        <span class="preview-label">Essay analysis</span>
+                        <span class="preview-live">Live</span>
+                    </div>
+                    <div class="preview-body">
+                        <div class="preview-main">
+                            <div class="preview-eyebrow">Argumentative essay</div>
+                            <div class="preview-title">The role of critical thinking</div>
+                            <div class="preview-line" style="width: 92%"></div>
+                            <div class="preview-line" style="width: 80%"></div>
+                            <div class="preview-line" style="width: 88%"></div>
+                            <div class="preview-line" style="width: 70%"></div>
+                            <div class="preview-line" style="width: 45%"></div>
+                        </div>
+                        <div class="preview-side">
+                            <div class="preview-score-label">Draft score</div>
+                            <div class="preview-score">84<span style="font-size: 0.7rem; color: var(--penman-muted)">/100</span></div>
+                            <div class="preview-chip">
+                                <div class="preview-chip-row"><span class="preview-chip-dot"></span> Cleaner transition</div>
+                                <div class="preview-chip-text">Connect the idea more directly to your next point.</div>
+                            </div>
+                            <div class="preview-chip">
+                                <div class="preview-chip-row"><span class="preview-chip-dot"></span> Strong evidence</div>
+                                <div class="preview-chip-text">This example supports your central claim well.</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="preview-insights">
+                        <span class="preview-insights-icon"><i class="bi bi-stars"></i></span>
+                        <div>
+                            <div class="preview-insights-title">3 insights found</div>
+                            <div class="preview-insights-sub">Your structure is getting stronger</div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
-</div>
+</section>
+
+<section class="landing-section">
+    <div class="container-xl">
+        <div class="landing-section-label">How Penman helps</div>
+        <h2 class="landing-section-title">Feedback for every layer of your essay.</h2>
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="feature-card">
+                    <div class="feature-icon grammar"><i class="bi bi-check2-square"></i></div>
+                    <h5>Grammar &amp; syntax</h5>
+                    <p>Catch subtle errors and improve clarity without flattening your unique voice.</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="feature-card">
+                    <div class="feature-icon structure"><i class="bi bi-layers"></i></div>
+                    <h5>Structural feedback</h5>
+                    <p>Strengthen your thesis, paragraph flow, transitions, and overall argument.</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="feature-card">
+                    <div class="feature-icon contextual"><i class="bi bi-lightbulb"></i></div>
+                    <h5>Contextual analysis</h5>
+                    <p>Get suggestions shaped around your essay type, audience, tone, and intent.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<footer class="landing-site-footer">
+    <div class="container-xl d-flex flex-column justify-content-center text-center">
+        <span><i class="bi bi-patch-check"></i>
+            <strong>Academic Integrity Notice:</strong> Penman AI is an assistant for grammar and feedback.
+            It does not write essays on your behalf. All submitted work must remain your own.</span>
+    </div>
+</footer>
 {% endblock %}

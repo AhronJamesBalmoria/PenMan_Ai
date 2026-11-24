@@ -1,6 +1,3 @@
-import asyncio
-from contextlib import asynccontextmanager
-
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import RedirectResponse
@@ -10,34 +7,11 @@ from app.config import BASE_DIR, settings
 from app.exceptions import RedirectException
 from app.middleware import SecurityHeadersMiddleware, SessionMiddleware
 from app.routers import analysis, auth, drafts, pages
-from app.services.style_profiler import warm_up_embedder
 from app.templating import templates
 
 settings.validate()
 
-# Strong reference so the warm-up task is not garbage-collected mid-flight.
-_warmup_task: asyncio.Task | None = None
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Warm the ONNX embedder in the background.
-
-    Loading happens in a worker thread, so /health responds immediately and a
-    failed model download (offline dev, blocked CDN) never blocks boot: the
-    first analysis simply retries the load lazily.
-    """
-    global _warmup_task
-    if settings.APP_ENV.strip().lower() != "test":
-        _warmup_task = asyncio.create_task(asyncio.to_thread(warm_up_embedder))
-    try:
-        yield
-    finally:
-        if _warmup_task is not None:
-            _warmup_task.cancel()
-
-
-app = FastAPI(title="Penman AI", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="Penman AI", version="0.2.0")
 
 
 @app.exception_handler(RedirectException)

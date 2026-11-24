@@ -45,12 +45,15 @@
         {% block content %}{% endblock %}
     </main>
 
-    <footer class="site-footer mt-5 py-4 small">
-        <div class="container-xl text-center">
-            <strong>Academic Integrity Notice:</strong> Penman AI is an assistant for grammar and feedback.
-            It does not write essays on your behalf. All submitted work must remain your own.
+    {% block footer %}
+    <footer class="site-footer">
+        <div class="container-xl d-flex flex-column justify-content-center text-center">
+            <span><i class="bi bi-check-circle"></i>
+                <strong>Academic Integrity Notice:</strong> Penman AI is an assistant for grammar and feedback.
+                It does not write essays on your behalf. All submitted work must remain your own.</span>
         </div>
     </footer>
+    {% endblock %}
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     {% block scripts %}{% endblock %}
