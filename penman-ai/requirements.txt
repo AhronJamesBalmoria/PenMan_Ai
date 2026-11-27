@@ -8,6 +8,3 @@ pydantic==2.9.2
 httpx==0.27.2
 PyJWT==2.15.1
 python-docx==1.1.2
-# Local 384-dim style embeddings on ONNX (~100 MB RAM) instead of torch (~2 GB).
-# FastEmbed uses the same BAAI/bge-small-en-v1.5 weights as sentence-transformers.
-fastembed==0.9.1

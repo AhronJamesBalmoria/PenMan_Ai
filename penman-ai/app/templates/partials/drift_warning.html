@@ -11,5 +11,16 @@
     <div>
         <div class="drift-alert-title">Style Drift Detected</div>
         <div class="drift-alert-text">{{ drift_warning }}</div>
+        <div class="text-center mt-1">
+            <button type="button" class="btn drift-accept-btn"
+                hx-post="/api/analyze/accept-drift"
+                hx-include="#plain-text-input, #essay-type-select"
+                hx-target="#baseline-status"
+                hx-swap="innerHTML"
+                hx-disabled-elt="this"
+                title="Add this essay to the writing profile for this essay type">
+                This is my usual style — update my style profile
+            </button>
+        </div>
     </div>
 </div>

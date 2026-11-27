@@ -35,6 +35,15 @@ def _render(name, **context):
     return templates.env.get_template(name).render(**context)
 
 
+def test_score_bar_css_sets_width_for_every_score():
+    """The template only emits a class name; CSS must supply the fill width."""
+    from app.config import BASE_DIR
+
+    css = (BASE_DIR / "static" / "css" / "style.css").read_text(encoding="utf-8")
+    for score in range(101):
+        assert f".score-bar-{score} {{ width: {score}%; }}" in css
+
+
 def test_structure_partial_handles_missing_scores():
     rendered = _render(
         "partials/structure_results.html",
@@ -61,6 +70,30 @@ def test_structure_partial_handles_absent_score_keys():
         truncated=False,
     )
     assert "Structural Analysis" in rendered
+
+
+def test_contextual_meta_never_wraps():
+    from app.config import BASE_DIR
+
+    rendered = _render(
+        "partials/contextual_results.html",
+        error=None,
+        tone="reflective",
+        register="conversational",
+        alignment_score=5,
+        intent="",
+        alignment_note="",
+        suggestions=[],
+        model_used="groq/x",
+        truncated=False,
+    )
+    assert "flex-nowrap gap-2 mb-2 contextual-meta" in rendered
+    assert "flex-wrap contextual-meta" not in rendered
+
+    css = (BASE_DIR / "static" / "css" / "style.css").read_text(encoding="utf-8")
+    rule = css.split(".contextual-meta {", 1)[1].split("}", 1)[0]
+    assert "flex-wrap: nowrap" in rule
+    assert "overflow-x: auto" in rule
 
 
 def test_contextual_partial_handles_missing_alignment():
@@ -188,7 +221,7 @@ def test_structure_service_returns_friendly_error(monkeypatch):
         return None, None, "HTTP 404: model gemini-3.8-flash not found"
 
     monkeypatch.setattr(structure_service, "generate_json", failing)
-    result = asyncio.run(structure_service.analyze_structure("word " * 40))
+    result = asyncio.run(structure_service.analyze_structure("word " * 110))
 
     assert result["error"] == structure_service.UNAVAILABLE
     assert "gemini-3.8-flash" not in result["error"]
@@ -237,7 +270,7 @@ def test_contextual_service_injects_essay_type_into_prompt(monkeypatch):
 
     monkeypatch.setattr(contextual_service, "generate_json", fake)
     result = asyncio.run(
-        contextual_service.analyze_contextual("word " * 40, "creative")
+        contextual_service.analyze_contextual("word " * 110, "creative")
     )
 
     assert result["error"] is None
@@ -275,7 +308,7 @@ def test_structure_service_returns_specific_suggestions(monkeypatch):
         }, "groq/openai/gpt-oss-20b", None
 
     monkeypatch.setattr(structure_service, "generate_json", fake)
-    result = asyncio.run(structure_service.analyze_structure("word " * 40))
+    result = asyncio.run(structure_service.analyze_structure("word " * 110))
 
     assert result["specific_suggestions"] == [
         {
@@ -293,7 +326,7 @@ def test_structure_service_defaults_specific_suggestions_to_empty(monkeypatch):
         return {"overall": {"score": 4, "summary": "ok"}}, "groq/openai/gpt-oss-20b", None
 
     monkeypatch.setattr(structure_service, "generate_json", fake)
-    result = asyncio.run(structure_service.analyze_structure("word " * 40))
+    result = asyncio.run(structure_service.analyze_structure("word " * 110))
 
     assert result["specific_suggestions"] == []
 
@@ -318,7 +351,7 @@ def test_analysis_route_normalizes_essay_type(
     monkeypatch.setattr("app.routers.analysis.analyze_structure", fake)
     response = client.post(
         "/api/analyze/structure",
-        data={"plain_text": "word " * 40, "essay_type": "haiku"},
+        data={"plain_text": "word " * 110, "essay_type": "haiku"},
     )
 
     assert response.status_code == 200
@@ -341,7 +374,7 @@ def test_structure_route_schedules_profile_update_with_token(
         }
 
     monkeypatch.setattr("app.routers.analysis.analyze_structure", fake)
-    text = "word " * 40
+    text = "word " * 110
     response = client.post(
         "/api/analyze/structure",
         data={"plain_text": text, "essay_type": "expository"},
@@ -375,7 +408,7 @@ def test_contextual_route_schedules_profile_update_with_token(
     monkeypatch.setattr("app.routers.analysis.analyze_contextual", fake)
     response = client.post(
         "/api/analyze/contextual",
-        data={"plain_text": "word " * 40, "essay_type": "expository"},
+        data={"plain_text": "word " * 110, "essay_type": "expository"},
     )
 
     assert response.status_code == 200
@@ -435,7 +468,7 @@ def test_saved_profile_is_injected_and_throttled(
     monkeypatch.setattr("app.routers.analysis.analyze_structure", fake)
     response = client.post(
         "/api/analyze/structure",
-        data={"plain_text": "word " * 40, "essay_type": "expository"},
+        data={"plain_text": "word " * 110, "essay_type": "expository"},
     )
 
     assert response.status_code == 200
@@ -481,7 +514,7 @@ def test_profile_throttle_is_scoped_to_persona(
     monkeypatch.setattr("app.routers.analysis.analyze_structure", fake)
     client.post(
         "/api/analyze/structure",
-        data={"plain_text": "word " * 40, "essay_type": "expository"},
+        data={"plain_text": "word " * 110, "essay_type": "expository"},
     )
 
     assert captured["user_profile"]["tone"] == "formal"
@@ -515,7 +548,7 @@ def test_stale_profile_is_refreshed(
     monkeypatch.setattr("app.routers.analysis.analyze_structure", fake)
     client.post(
         "/api/analyze/structure",
-        data={"plain_text": "word " * 40, "essay_type": "expository"},
+        data={"plain_text": "word " * 110, "essay_type": "expository"},
     )
 
     assert len(scheduled_profile_updates) == 1
@@ -558,7 +591,7 @@ def test_update_user_style_profile_upserts_with_fresh_client(monkeypatch, fake_d
 
     result = asyncio.run(
         style_profiler.update_user_style_profile(
-            USER_ID, "word " * 40, "test-token", "creative"
+            USER_ID, "word " * 110, "test-token", "creative"
         )
     )
 
@@ -590,7 +623,7 @@ def test_update_user_style_profile_keeps_one_row_per_persona(
     for essay_type in ("creative", "creative", "expository"):
         result = asyncio.run(
             style_profiler.update_user_style_profile(
-                USER_ID, "word " * 40, "test-token", essay_type
+                USER_ID, "word " * 110, "test-token", essay_type
             )
         )
         assert result["success"] is True
@@ -624,7 +657,7 @@ def test_update_user_style_profile_uses_fallback_tone_when_metrics_fail(
 
     result = asyncio.run(
         style_profiler.update_user_style_profile(
-            USER_ID, "word " * 40, "test-token", "expository"
+            USER_ID, "word " * 110, "test-token", "expository"
         )
     )
 
@@ -647,6 +680,36 @@ def test_structure_partial_renders_drift_warning_on_success():
     )
     assert "Style Drift Detected" in rendered
     assert "usual 'formal' tone" in html.unescape(rendered)
+
+
+def test_drift_warning_offers_add_to_profile():
+    rendered = _render(
+        "partials/drift_warning.html",
+        drift_warning="This looks very different from your usual 'formal' tone.",
+    )
+
+    assert "This is my usual style — update my style profile" in rendered
+    assert 'hx-post="/api/analyze/accept-drift"' in rendered
+    assert 'hx-include="#plain-text-input, #essay-type-select"' in rendered
+    assert 'hx-post="/api/analyze/reset"' not in rendered
+    assert "drift-accept-btn" in rendered
+    assert '<div class="text-center mt-1">' in rendered
+    assert "btn-outline-secondary" not in rendered
+
+
+def test_drift_alert_is_compact_with_green_button():
+    from app.config import BASE_DIR
+
+    css = (BASE_DIR / "static" / "css" / "style.css").read_text(encoding="utf-8")
+    alert = css.split(".drift-alert {", 1)[1].split("}", 1)[0]
+    assert "padding: 0.5rem 0.6rem" in alert
+    assert "font-size: 0.7rem" in css.split(".drift-alert-text {", 1)[1].split("}", 1)[0]
+
+    button = css.split(".drift-accept-btn {", 1)[1].split("}", 1)[0]
+    assert "white-space: nowrap" in button
+    assert "background: transparent" in button
+    assert "border: 1px solid var(--penman-indigo)" in button
+    assert "color: var(--penman-indigo)" in button
 
 
 def test_contextual_partial_renders_drift_warning_on_success():
@@ -767,7 +830,7 @@ def test_structure_route_passes_drift_warning_to_template(
 
     response = client.post(
         "/api/analyze/structure",
-        data={"plain_text": "word " * 40, "essay_type": "expository"},
+        data={"plain_text": "word " * 110, "essay_type": "expository"},
     )
 
     assert response.status_code == 200
@@ -779,7 +842,6 @@ def test_structure_route_detects_formal_to_casual_drift(
     client, fake_db, monkeypatch
 ):
     """End-to-end: a formal saved profile + casual paste renders the banner."""
-    from app.services import style_profiler
 
     formal = (
         "The proliferation of social media has fundamentally altered the "
@@ -792,7 +854,13 @@ def test_structure_route_detects_formal_to_casual_drift(
     casual = (
         "yo whats up fam, this is a casual tiktok message lol. lowkey just "
         "vibes today, no cap. anyway wyd later? we should link up and maybe "
-        "grab food or something idk. my day was so mid honestly."
+        "grab food or something idk. my day was so mid honestly. "
+        "like seriously tho, the whole thing was kinda weird?? but also fine, "
+        "idk, whatever, it happens lol. anyway im gonna go do my own thing now, "
+        "hit me up if you wanna hang or whatever, cool? cool cool cool. "
+        "oh and also, no pressure, but if you're around tomorrow maybe we can "
+        "chat some more? anyway later!! also lol I almost forgot, that thing "
+        "you said was kinda iconic ngl. ok bye!! swift vibes only, no drama."
     )
 
     from app.services.stylometry import FEATURE_COUNT, style_features
@@ -858,12 +926,86 @@ def test_structure_route_uses_persona_for_drift_and_profile_update(
 
     response = client.post(
         "/api/analyze/structure",
-        data={"plain_text": "word " * 40, "essay_type": "creative"},
+        data={"plain_text": "word " * 110, "essay_type": "creative"},
     )
 
     assert response.status_code == 200
     assert captured["persona"] == "creative"
     assert scheduled_profile_updates[0]["essay_type"] == "creative"
+
+
+def test_accept_drift_adds_essay_without_resetting(client, monkeypatch):
+    captured = {}
+
+    async def fake_update(user_id, text, access_token, essay_type):
+        captured.update(
+            user_id=user_id,
+            text=text,
+            access_token=access_token,
+            essay_type=essay_type,
+        )
+        return {"success": True}
+
+    monkeypatch.setattr(
+        "app.routers.analysis.update_user_style_profile", fake_update
+    )
+
+    response = client.post(
+        "/api/analyze/accept-drift",
+        data={"plain_text": "word " * 110, "essay_type": "Creative"},
+    )
+
+    assert response.status_code == 200
+    assert "Added to your style profile." in response.text
+    assert captured["essay_type"] == "creative"
+    assert captured["access_token"] == "test-token"
+    assert captured["text"] == "word " * 110
+
+
+def test_accept_drift_reports_profiler_error(client, monkeypatch):
+    async def failing_update(user_id, text, access_token, essay_type):
+        return {"error": "Text too short to extract a reliable style profile."}
+
+    monkeypatch.setattr(
+        "app.routers.analysis.update_user_style_profile", failing_update
+    )
+
+    response = client.post(
+        "/api/analyze/accept-drift",
+        data={"plain_text": "word " * 110, "essay_type": "expository"},
+    )
+
+    assert response.status_code == 200
+    assert "Text too short" in response.text
+
+
+def test_reset_profile_clears_baseline_and_renders_status(client, fake_db):
+    fake_db.profiles["p1"] = {
+        "id": "p1",
+        "user_id": USER_ID,
+        "essay_type": "expository",
+        "tone": "formal",
+    }
+
+    response = client.post("/api/analyze/reset", data={"essay_type": "Expository"})
+
+    assert response.status_code == 200
+    assert "Baseline reset." in response.text
+    assert fake_db.profiles == {}
+
+
+def test_reset_profile_does_not_echo_exception_text(client, fake_db, monkeypatch):
+    class Exploding:
+        def table(self, name):
+            raise RuntimeError('<script>alert("boom")</script>')
+
+    monkeypatch.setattr(fake_db, "table", Exploding().table)
+
+    response = client.post("/api/analyze/reset", data={"essay_type": "creative"})
+
+    assert response.status_code == 200
+    assert "<script>" not in response.text
+    assert "Could not reset the baseline" in response.text
 
 
 def test_check_style_drift_skips_missing_persona(monkeypatch, fake_db):
@@ -879,7 +1021,7 @@ def test_check_style_drift_skips_missing_persona(monkeypatch, fake_db):
 
     result = asyncio.run(
         style_profiler.check_style_drift(
-            USER_ID, "word " * 40, "expository", fake_db
+            USER_ID, "word " * 110, "expository", fake_db
         )
     )
 
@@ -902,7 +1044,7 @@ def test_check_style_drift_returns_not_enough_history(fake_db):
 
     result = asyncio.run(
         style_profiler.check_style_drift(
-            USER_ID, "word " * 40, "expository", fake_db
+            USER_ID, "word " * 110, "expository", fake_db
         )
     )
 
@@ -915,7 +1057,7 @@ def test_check_style_drift_selects_the_requested_persona(fake_db):
     from app.services import style_profiler
     from app.services.stylometry import FEATURE_COUNT, style_features
 
-    text = "word " * 40
+    text = "word " * 110
     features = style_features(text)
     fake_db.profiles["p1"] = {
         "id": "p1",
@@ -994,3 +1136,17 @@ def test_groq_retries_without_json_mode_on_validation_error(monkeypatch):
     assert len(payloads) == 2
     assert "response_format" in payloads[0]
     assert "response_format" not in payloads[1]
+
+
+
+def test_drift_warning_hidden_when_analysis_errors():
+    rendered = _render(
+        "partials/structure_results.html",
+        error="Analysis is unavailable right now. Please try again.",
+        drift_warning="This looks very different from your usual 'formal' tone.",
+        scores={},
+        feedback={},
+        truncated=False,
+    )
+    assert "Style Drift Detected" not in rendered
+    assert "Analysis is unavailable right now" in rendered

@@ -14,7 +14,7 @@
         <div class="alert alert-info small">{{ info }}</div>
         {% endif %}
 
-        <form action="/auth/register" method="post" novalidate>
+        <form action="/auth/register" method="post" novalidate data-password-minlength="8">
             <div class="mb-3">
                 <label class="auth-label" for="display_name">Username</label>
                 <input type="text" name="display_name" id="display_name" class="auth-input" placeholder="Your username">
@@ -32,10 +32,13 @@
                         <i class="bi bi-eye"></i>
                     </button>
                 </div>
+                <div class="form-text small text-muted">At least 8 characters</div>
             </div>
             <label class="auth-check">
                 <input type="checkbox" name="terms_agreed" required>
-                <span>I agree to the <a href="/terms">Terms of Service</a> and <a href="/privacy">Privacy Policy</a></span>
+                <span>I agree to the <a href="/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a> and
+                    <a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Notice</a><span
+                        class="visually-hidden"> (opens in a new tab)</span></span>
             </label>
             <button class="auth-btn" type="submit">Create account</button>
         </form>

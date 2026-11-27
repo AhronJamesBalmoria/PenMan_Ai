@@ -77,6 +77,12 @@ document.addEventListener('DOMContentLoaded', function () {
             updateFeedbackScore();
             updateGrammarSummary();
         }
+        if (event.target && event.target.id === 'baseline-status') {
+            // htmx's hx-on attributes need 'unsafe-eval', which our CSP does not
+            // allow, so clear the reset confirmation from plain JS instead.
+            const status = event.target;
+            setTimeout(function () { status.textContent = ''; }, 4000);
+        }
     });
 
     const AUTOSAVE_DELAY = 2000;
@@ -432,8 +438,6 @@ document.addEventListener('DOMContentLoaded', function () {
         const safeLength = clampLength(index, targetLength);
         if (safeLength <= 0) return;
 
-        console.log("Quill selection:", index, safeLength);
-
         document.querySelectorAll(
             '.grammar-suggestion.is-active, .structure-suggestion.is-active, .context-suggestion.is-active'
         ).forEach((other) => {
@@ -468,8 +472,6 @@ document.addEventListener('DOMContentLoaded', function () {
         const length = clampLength(located.index, matchLen);
         if (length <= 0) return;
 
-        console.log("Quill selection:", located.index, length);
-
         document.querySelectorAll(
             '.grammar-suggestion.is-active, .structure-suggestion.is-active, .context-suggestion.is-active'
         ).forEach((other) => {
@@ -495,8 +497,6 @@ document.addEventListener('DOMContentLoaded', function () {
         const length = Number(button.dataset.length);
         const original = button.dataset.original || card.dataset.original || '';
         const replacement = button.dataset.replacement;
-
-        console.log("Accept clicked", offset, length, replacement);
 
         if (!Number.isFinite(offset) || !Number.isFinite(length)) return;
         if (!replacement) {
@@ -535,10 +535,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Delegated on document.body so HTMX swaps of #feedback-panel cannot
     // detach the handlers from the suggestion buttons or cards.
-    console.log("Grammar click delegation attached to document.body");
     document.body.addEventListener('click', function (event) {
         const target = event.target instanceof Element ? event.target : null;
-        console.log("Click detected!", target);
         if (!target) return;
 
         const acceptButton = target.closest('.grammar-accept-btn');
@@ -553,7 +551,6 @@ document.addEventListener('DOMContentLoaded', function () {
         if (dismissButton) {
             event.preventDefault();
             event.stopPropagation();
-            console.log("Dismiss clicked", dismissButton);
             clearHighlights();
             removeGrammarCard(dismissButton.closest('.grammar-suggestion'));
             return;

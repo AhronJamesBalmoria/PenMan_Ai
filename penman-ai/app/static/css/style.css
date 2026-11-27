@@ -248,6 +248,11 @@ body {
 }
 
 #editor-container .ql-editor.ql-blank::before {
+    /* Match the editor's padding so the caret at position 0 sits before the
+       first letter of the placeholder instead of inside it. */
+    left: 1.5rem;
+    right: 1.5rem;
+    top: 2.5rem;
     color: #9CA3AF;
     font-style: normal;
     font-family: 'Lora', Georgia, serif;
@@ -302,7 +307,6 @@ body {
 .editor-footer .word-count { color: var(--penman-muted); font-size: 0.85rem; }
 .editor-footer .btn-upload,
 .editor-footer .btn-save { white-space: nowrap; flex-shrink: 0; }
-#baseline-status { white-space: nowrap; flex-shrink: 0; }
 .editor-footer .btn-save { background: var(--penman-indigo); color: #fff; border: 0; border-radius: 8px; padding: 0.5rem 1.25rem; font-weight: 600; font-size: 0.9rem; }
 .editor-footer .btn-save:hover { background: var(--penman-indigo-dark); }
 .editor-footer .btn-upload { background: #fff; color: #374151; border: 1px solid var(--penman-border); border-radius: 8px; padding: 0.5rem 1.25rem; font-weight: 500; font-size: 0.9rem; display: inline-flex; align-items: center; gap: 0.4rem; }
@@ -382,15 +386,26 @@ body {
 .drift-alert {
     display: flex;
     align-items: flex-start;
-    gap: 0.6rem;
+    gap: 0.5rem;
     background: #FFFBEB;
     border: 1px solid #FDE68A;
-    border-radius: 10px;
-    padding: 0.75rem;
+    border-radius: 8px;
+    padding: 0.5rem 0.6rem;
 }
 .drift-alert-icon { color: #D97706; flex-shrink: 0; line-height: 1; }
-.drift-alert-title { font-size: 0.8rem; font-weight: 700; color: #92400E; }
-.drift-alert-text { font-size: 0.75rem; color: #A16207; line-height: 1.5; }
+.drift-alert-title { font-size: 0.75rem; font-weight: 700; color: #92400E; }
+.drift-alert-text { font-size: 0.7rem; color: #A16207; line-height: 1.4; }
+.drift-accept-btn {
+    background: transparent;
+    border: 1px solid var(--penman-indigo);
+    color: var(--penman-indigo);
+    border-radius: 6px;
+    padding: 0.2rem 0.45rem;
+    font-size: 0.65rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.drift-accept-btn:hover { background: var(--penman-indigo); color: #fff; }
 
 /* ---------------------------------------------------------------- Suggestions */
 .suggestions-heading { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--penman-muted); }
@@ -419,7 +434,10 @@ body {
 .suggestion-score.is-medium { background: #FEF3C7; color: #B45309; }
 .suggestion-score.is-low { background: #E8F5E9; color: var(--penman-indigo); }
 .suggestion-locate { font-size: 0.7rem; color: var(--penman-indigo); }
-.feedback-footnote { display: flex; align-items: center; gap: 0.35rem; color: #9CA3AF; font-size: 0.7rem; }
+.feedback-footnote { display: flex; align-items: center; gap: 0.35rem; color: #9CA3AF; font-size: 0.7rem; position: relative; }
+/* Kept out of the flex flow so the "..." menu stays flush right; the reset
+   confirmation still appears underneath, right-aligned. */
+#baseline-status { position: absolute; right: 0; bottom: -1.1rem; white-space: nowrap; }
 
 /* ---------------------------------------------------------------- Grammar suggestions */
 .grammar-suggestion {
@@ -448,17 +466,127 @@ body {
 .score-bar-100, .score-bar-95, .score-bar-90, .score-bar-85, .score-bar-80 { background: #10B981; }
 .score-bar-75, .score-bar-70 { background: #F59E0B; }
 .score-bar-65, .score-bar-60 { background: #F97316; }
+
+/* Bootstrap's .progress-bar starts at width: 0; the score only arrives as a
+   class name, so each class needs an explicit width. Grammar emits any
+   multiple of 4 from 0-100 and structure/context emit multiples of 20. */
+.score-bar-0 { width: 0%; }
+.score-bar-1 { width: 1%; }
+.score-bar-2 { width: 2%; }
+.score-bar-3 { width: 3%; }
+.score-bar-4 { width: 4%; }
+.score-bar-5 { width: 5%; }
+.score-bar-6 { width: 6%; }
+.score-bar-7 { width: 7%; }
+.score-bar-8 { width: 8%; }
+.score-bar-9 { width: 9%; }
+.score-bar-10 { width: 10%; }
+.score-bar-11 { width: 11%; }
+.score-bar-12 { width: 12%; }
+.score-bar-13 { width: 13%; }
+.score-bar-14 { width: 14%; }
+.score-bar-15 { width: 15%; }
+.score-bar-16 { width: 16%; }
+.score-bar-17 { width: 17%; }
+.score-bar-18 { width: 18%; }
+.score-bar-19 { width: 19%; }
+.score-bar-20 { width: 20%; }
+.score-bar-21 { width: 21%; }
+.score-bar-22 { width: 22%; }
+.score-bar-23 { width: 23%; }
+.score-bar-24 { width: 24%; }
+.score-bar-25 { width: 25%; }
+.score-bar-26 { width: 26%; }
+.score-bar-27 { width: 27%; }
+.score-bar-28 { width: 28%; }
+.score-bar-29 { width: 29%; }
+.score-bar-30 { width: 30%; }
+.score-bar-31 { width: 31%; }
+.score-bar-32 { width: 32%; }
+.score-bar-33 { width: 33%; }
+.score-bar-34 { width: 34%; }
+.score-bar-35 { width: 35%; }
+.score-bar-36 { width: 36%; }
+.score-bar-37 { width: 37%; }
+.score-bar-38 { width: 38%; }
+.score-bar-39 { width: 39%; }
+.score-bar-40 { width: 40%; }
+.score-bar-41 { width: 41%; }
+.score-bar-42 { width: 42%; }
+.score-bar-43 { width: 43%; }
+.score-bar-44 { width: 44%; }
+.score-bar-45 { width: 45%; }
+.score-bar-46 { width: 46%; }
+.score-bar-47 { width: 47%; }
+.score-bar-48 { width: 48%; }
+.score-bar-49 { width: 49%; }
+.score-bar-50 { width: 50%; }
+.score-bar-51 { width: 51%; }
+.score-bar-52 { width: 52%; }
+.score-bar-53 { width: 53%; }
+.score-bar-54 { width: 54%; }
+.score-bar-55 { width: 55%; }
+.score-bar-56 { width: 56%; }
+.score-bar-57 { width: 57%; }
+.score-bar-58 { width: 58%; }
+.score-bar-59 { width: 59%; }
+.score-bar-60 { width: 60%; }
+.score-bar-61 { width: 61%; }
+.score-bar-62 { width: 62%; }
+.score-bar-63 { width: 63%; }
+.score-bar-64 { width: 64%; }
+.score-bar-65 { width: 65%; }
+.score-bar-66 { width: 66%; }
+.score-bar-67 { width: 67%; }
+.score-bar-68 { width: 68%; }
+.score-bar-69 { width: 69%; }
+.score-bar-70 { width: 70%; }
+.score-bar-71 { width: 71%; }
+.score-bar-72 { width: 72%; }
+.score-bar-73 { width: 73%; }
+.score-bar-74 { width: 74%; }
+.score-bar-75 { width: 75%; }
+.score-bar-76 { width: 76%; }
+.score-bar-77 { width: 77%; }
+.score-bar-78 { width: 78%; }
+.score-bar-79 { width: 79%; }
+.score-bar-80 { width: 80%; }
+.score-bar-81 { width: 81%; }
+.score-bar-82 { width: 82%; }
+.score-bar-83 { width: 83%; }
+.score-bar-84 { width: 84%; }
+.score-bar-85 { width: 85%; }
+.score-bar-86 { width: 86%; }
+.score-bar-87 { width: 87%; }
+.score-bar-88 { width: 88%; }
+.score-bar-89 { width: 89%; }
+.score-bar-90 { width: 90%; }
+.score-bar-91 { width: 91%; }
+.score-bar-92 { width: 92%; }
+.score-bar-93 { width: 93%; }
+.score-bar-94 { width: 94%; }
+.score-bar-95 { width: 95%; }
+.score-bar-96 { width: 96%; }
+.score-bar-97 { width: 97%; }
+.score-bar-98 { width: 98%; }
+.score-bar-99 { width: 99%; }
+.score-bar-100 { width: 100%; }
 .priority-pill { font-size: 0.7rem; font-weight: 600; border-radius: 6px; padding: 0.1rem 0.4rem; }
 .priority-pill.is-high { background: #FEE2E2; color: #B91C1C; }
 .priority-pill.is-medium { background: #FEF3C7; color: #B45309; }
 .priority-pill.is-low { background: #E8F5E9; color: var(--penman-indigo); }
 .meta-pill { font-size: 0.75rem; color: var(--penman-muted); background: #F9FAFB; border: 1px solid #F3F4F6; border-radius: 8px; padding: 0.3rem 0.55rem; }
 .contextual-meta {
-    font-size: 0.72rem;
+    font-size: 0.68rem;
     color: var(--penman-muted);
     white-space: nowrap;
-    gap: 0.6rem !important;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    gap: 0.5rem !important;
 }
+.contextual-meta::-webkit-scrollbar { display: none; }
 .section-score-row { padding: 0.6rem 0; border-bottom: 1px solid #F3F4F6; }
 .score-pill { font-size: 0.75rem; font-weight: 700; border-radius: 6px; padding: 0.15rem 0.4rem; background: #F3F4F6; color: #4B5563; }
 .score-pill.is-strong { background: #D1FAE5; color: #047857; }
@@ -533,6 +661,8 @@ body {
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
     padding: 2.25rem;
 }
+/* Legal pages use the same centred card, but need room for long paragraphs. */
+.legal-card { max-width: 760px; padding: 2.5rem 3rem; text-align: left; }
 .auth-title { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 0.35rem; }
 .auth-subtitle { color: var(--penman-muted); font-size: 0.85rem; margin-bottom: 1.5rem; }
 .auth-label { font-size: 0.8rem; font-weight: 600; color: var(--penman-ink); margin-bottom: 0.35rem; }
@@ -552,9 +682,14 @@ body {
 .auth-password-wrap .auth-input { padding-right: 2.75rem; }
 .password-toggle {
     position: absolute;
-    top: 50%;
+    /* Anchor to the input's top edge, not the wrapper's centre: the wrapper
+       grows when an inline validation error is inserted beneath the input. */
+    top: 0.55rem;
     right: 0.75rem;
-    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    height: 1.4rem;
+    line-height: 1;
     background: none;
     border: 0;
     color: var(--penman-muted);

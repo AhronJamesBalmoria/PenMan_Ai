@@ -2,38 +2,52 @@
 {% block title %}Terms of Service | Penman AI{% endblock %}
 
 {% block content %}
-<div class="container py-5" style="max-width: 760px;">
-    <h1 class="fw-bold mb-3">Terms of Service</h1>
-    <p class="text-muted small mb-4">Last updated: November 2026</p>
+<div class="auth-page">
+    <div class="auth-card legal-card">
+        <h1 class="auth-title">Terms of Service</h1>
+        <p class="auth-subtitle">Last updated: November 2026</p>
 
-    <h5 class="fw-bold mt-4">Using Penman AI</h5>
-    <p class="text-muted">
-        Penman AI provides writing feedback and suggestions. You are responsible for
-        the work you submit. Do not use the service to generate essays on your behalf
-        or to violate the academic integrity rules of your institution.
-    </p>
+        <h5 class="fw-bold mt-4">Using Penman AI</h5>
+        <p class="text-muted small">
+            Penman AI gives writing feedback and grammar suggestions. You are
+            responsible for the work you submit and for every suggestion you accept.
+        </p>
 
-    <h5 class="fw-bold mt-4">Academic integrity</h5>
-    <p class="text-muted">
-        This tool is an assistant for grammar and constructive feedback — it never
-        writes essays for you. All submitted work must remain your own. By using
-        Penman AI you agree to review and take responsibility for every suggestion
-        you accept.
-    </p>
+        <h5 class="fw-bold mt-4">Academic integrity</h5>
+        <p class="text-muted small">
+            Penman AI is designed to help with grammar and feedback, not to write essays
+            for you. Do not use it to produce work you submit as your own or to break
+            your school's academic integrity rules. The style-profile feature is only
+            for your own information. It is not a plagiarism or AI-detection tool, it
+            is not proof of misconduct, and we do not share it with your school.
+        </p>
 
-    <h5 class="fw-bold mt-4">Third-party services</h5>
-    <p class="text-muted">
-        Feedback is generated using Groq and OpenRouter, and grammar checking uses
-        LanguageTool. Your text is sent to these providers when you request analysis.
-        See the <a href="/privacy">Privacy Policy</a> for details.
-    </p>
+        <h5 class="fw-bold mt-4">Your content</h5>
+        <p class="text-muted small">
+            You own the text you write. You allow us to store and process it, including
+            by sending it to the services named in the
+            <a href="/privacy">Privacy Notice</a>, only to run Penman AI for you.
+        </p>
 
-    <h5 class="fw-bold mt-4">Accounts</h5>
-    <p class="text-muted">
-        Keep your account credentials secure. You may delete your drafts at any time
-        from the Drafts page. We may change or discontinue the service with notice.
-    </p>
+        <h5 class="fw-bold mt-4">AI can be wrong</h5>
+        <p class="text-muted small">
+            Feedback from AI may be incomplete or incorrect, so check it before you
+            accept it. We do not promise any grade or outcome.
+        </p>
 
-    <p class="mt-4"><a href="/register">← Back to registration</a></p>
+        <h5 class="fw-bold mt-4">Your account</h5>
+        <p class="text-muted small">
+            Keep your password secure. You can delete your drafts on the Drafts page,
+            reset your style profile from the feedback panel.
+        </p>
+
+        <h5 class="fw-bold mt-4">No warranty and limits on liability</h5>
+        <p class="text-muted small">
+            The service is provided "as is". To the extent the law allows, we are not
+            liable for indirect losses or for results from relying on AI feedback.
+        </p>
+
+        <p class="mt-4 mb-0"><a href="/register">Back to registration</a></p>
+    </div>
 </div>
 {% endblock %}

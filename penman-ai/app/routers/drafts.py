@@ -19,6 +19,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.config import settings
 from app.constants import normalize_essay_type
+from app.db.supabase_client import execute_async
 from app.dependencies import get_current_user, get_user_supabase
 from app.services.file_parser import extract_text
 
@@ -100,6 +101,10 @@ async def save_draft(
         "content": content,
         "plain_text": plain_text,
         "word_count": max(0, min(word_count, MAX_WORD_COUNT)),
+        # Written explicitly rather than relying on a database default: the
+        # default only fires on INSERT, so an update would keep the creation
+        # timestamp and the drafts list would sort by creation, not last edit.
+        "updated_at": datetime.now(UTC).isoformat(),
     }
 
     try:
@@ -110,12 +115,11 @@ async def save_draft(
             # back empty and looks like a 404; the editor then starts a new
             # draft instead of overwriting. The pages read drafts anyway, so
             # SELECT is required for the app to work at all.
-            res = (
+            res = await execute_async(
                 client.table("drafts")
                 .update(payload)
                 .eq("id", parsed_id)
                 .eq("user_id", user["id"])
-                .execute()
             )
             saved = res.data[0] if res.data else None
             action = "Updated"
@@ -123,7 +127,7 @@ async def save_draft(
             payload["user_id"] = user["id"]
             # insert/update default to `return=representation` in postgrest-py,
             # so the saved row (including its id) comes back here.
-            res = client.table("drafts").insert(payload).execute()
+            res = await execute_async(client.table("drafts").insert(payload))
             saved = res.data[0] if res.data else None
             action = "Saved"
 
@@ -181,12 +185,11 @@ async def delete_draft(
         return _redirect_after_delete(request, "/drafts?error=Invalid+draft.")
 
     try:
-        res = (
+        res = await execute_async(
             client.table("drafts")
             .delete()
             .eq("id", parsed_id)
             .eq("user_id", user["id"])
-            .execute()
         )
         if not res.data:
             return _redirect_after_delete(request, "/drafts?error=Draft+not+found.")

@@ -7,4 +7,7 @@ target-version = "py312"
 # `except Exception` is the correct shape there.
 select = ["E", "F", "I", "UP", "B", "SIM"]
 # B008: FastAPI's Depends()/File()/Form() belong in argument defaults.
-ignore = ["B008"]
+# SIM905: the word list is far more readable/maintainable as a space-separated
+# string than as a 100+ item list literal; its order is part of the stored vector
+# schema.
+ignore = ["B008", "SIM905"]

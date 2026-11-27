@@ -15,7 +15,7 @@
             <h1 class="page-title mb-1 mt-2">Essay Editor</h1>
         </div>
         <div class="page-stats text-md-end">
-            <span class="fw-semibold text-dark" id="word-count-top">0</span> words
+            <span id="word-count-top">0</span> words
             <span class="mx-1">·</span>
             <span id="char-count">0</span> characters
             <span class="mx-1">·</span>
@@ -157,8 +157,7 @@
                                 </li>
                             </ul>
                         </div>
-                        <span id="baseline-status" class="visually-hidden" aria-live="polite"
-                            hx-on::afterSwap="setTimeout(function() { this.textContent = ''; }, 3000);"></span>
+                        <span id="baseline-status" class="small text-muted" aria-live="polite"></span>
                     </div>
                 </div>
             </div>

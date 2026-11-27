@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: penman-ai
+    runtime: python
+    plan: free
+    # The app lives in the penman-ai/ subdirectory: build and start commands
+    # run relative to this directory.
+    rootDir: penman-ai
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      # Pin the interpreter so Render cannot pick a newer Python that lacks
+      # wheels for the pinned pydantic/uvloop versions. Matches .python-version.
+      - key: PYTHON_VERSION
+        value: 3.12.10
+      # Secrets: set these in the Render dashboard; sync: false stops a
+      # Blueprint sync from overwriting them with empty values.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: LOG_LEVEL
+        value: INFO
+      # Public origin (e.g. https://penman-ai.onrender.com) used in auth
+      # emails. Prevents a spoofed Host header from poisoning reset links.
+      - key: APP_BASE_URL
+        sync: false

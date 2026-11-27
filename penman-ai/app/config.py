@@ -4,6 +4,7 @@ import logging
 import os
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
@@ -38,6 +39,10 @@ KNOWN_ENVS = {"development", "test", "production"}
 class Settings:
     # --- environment -----------------------------------------------------
     APP_ENV: str = os.getenv("APP_ENV", "development")
+    # Public origin used in auth emails. Set it in production so a spoofed
+    # Host header cannot put an attacker's domain in a reset/confirm link.
+    # Empty means "use request.base_url" (fine for local development).
+    APP_BASE_URL: str = os.getenv("APP_BASE_URL", "").rstrip("/")
 
     # --- Supabase --------------------------------------------------------
     SUPABASE_URL: str = os.getenv("SUPABASE_URL", "").rstrip("/")
@@ -76,15 +81,6 @@ class Settings:
             return override.strip().lower() in {"1", "true", "yes", "on"}
         return self.APP_ENV.lower() == "production"
 
-    # --- style drift -----------------------------------------------------
-    # BGE-small style similarity is topic-sensitive: two unrelated formal
-    # essays measure ~0.56-0.59, while formal-vs-casual measures ~0.43-0.55.
-    # The score is a warning, never a block: raising the threshold catches
-    # more changes but also produces more false positives, and a false
-    # positive freezes the baseline until the user resets it from the editor.
-    STYLE_DRIFT_THRESHOLD: float = float(
-        os.getenv("STYLE_DRIFT_THRESHOLD", "0.60"))
-
     # --- logging ---------------------------------------------------------
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
 
@@ -116,6 +112,23 @@ class Settings:
                 "Missing required environment variables: "
                 + ", ".join(missing)
                 + ". Copy .env.example to .env and fill in the values."
+            )
+
+        # Auth emails build their links from APP_BASE_URL, falling back to the
+        # request Host header only in development. A missing or malformed value
+        # in production would email out localhost (or an attacker's origin).
+        if self.APP_BASE_URL:
+            parsed = urlparse(self.APP_BASE_URL)
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+                raise RuntimeError(
+                    "APP_BASE_URL must be an absolute http(s) URL, e.g. "
+                    "https://penman-ai.onrender.com."
+                )
+        elif self.APP_ENV.strip().lower() == "production":
+            raise RuntimeError(
+                "APP_BASE_URL must be set in production so password-reset and "
+                "confirmation emails link to your public origin instead of the "
+                "request Host header."
             )
 
         if is_jwt_shaped(self.SUPABASE_JWT_SECRET):

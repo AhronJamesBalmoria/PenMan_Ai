@@ -18,6 +18,8 @@
     {% set local = email.split('@')[0] if email else '' %}
     {% set parts = local.replace('.', ' ').replace('_', ' ').replace('-', ' ').split() %}
     {% set initials = ((parts[0][0] ~ parts[1][0]) if parts|length > 1 else local[:2])|upper %}
+    {# Auth cards already link to the other action, so the navbar links are redundant there. #}
+    {% set auth_paths = ['/login', '/register', '/forgot-password', '/reset-password'] %}
 
     <nav class="navbar navbar-expand-lg site-navbar">
         <div class="container-xl">
@@ -25,6 +27,7 @@
                 <span>Penman AI</span>
             </a>
 
+            {% if request.url.path not in auth_paths %}
             <div class="ms-auto d-flex align-items-center gap-3">
                 {% if user %}
                 <a href="/editor" class="nav-link-custom {% if request.url.path == '/editor' %}active{% endif %}">Editor</a>
@@ -38,6 +41,7 @@
                 <a href="/register" class="btn btn-sm btn-primary rounded-pill px-3">Register</a>
                 {% endif %}
             </div>
+            {% endif %}
         </div>
     </nav>
 

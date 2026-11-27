@@ -1,4 +1,4 @@
-{% if drift_warning %}
+{% if drift_warning and not error %}
 {% include "partials/drift_warning.html" %}
 {% endif %}
 

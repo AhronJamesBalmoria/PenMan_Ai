@@ -4,19 +4,20 @@ from __future__ import annotations
 import asyncio
 import html
 import logging
-from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, Request
 from fastapi.responses import HTMLResponse
 
 from app.config import settings
 from app.constants import DEFAULT_ESSAY_TYPE, normalize_essay_type
+from app.db.supabase_client import execute_async
 from app.dependencies import get_current_user, get_user_supabase
 from app.services.contextual import analyze_contextual
 from app.services.grammar import check_grammar
 from app.services.structure import analyze_structure
 from app.services.style_profiler import (
-    MIN_PROFILE_CHARS,
+    MIN_DRIFT_WORDS,
+    MIN_PROFILE_WORDS,
     check_style_drift,
     update_user_style_profile,
 )
@@ -31,12 +32,9 @@ TOO_LONG = (
     f"Please trim it to {settings.MAX_PLAIN_TEXT_CHARS:,} characters."
 )
 
-# Don't re-profile the same author on every click: tone/register extraction
-# calls Groq/OpenRouter, so refreshes are throttled.
-PROFILE_REFRESH_INTERVAL = timedelta(minutes=5)
 
-# Drift checks need at least this much text to be meaningful.
-MIN_DRIFT_CHARS = 50
+def _word_count(text: str) -> int:
+    return len((text or "").split())
 
 
 async def _load_profile(
@@ -44,12 +42,11 @@ async def _load_profile(
 ) -> dict | None:
     """Return the saved tone/register for one persona, plus ``updated_at``."""
     try:
-        response = (
+        response = await execute_async(
             client.table("author_profiles")
             .select("tone, register, updated_at")
             .eq("user_id", user_id)
             .eq("essay_type", essay_type)
-            .execute()
         )
         if response.data:
             return response.data[0]
@@ -63,12 +60,11 @@ async def _load_profile(
         )
 
     try:
-        response = (
+        response = await execute_async(
             client.table("author_profiles")
             .select("tone, register")
             .eq("user_id", user_id)
             .eq("essay_type", essay_type)
-            .execute()
         )
         if response.data:
             return response.data[0]
@@ -76,26 +72,6 @@ async def _load_profile(
         logger.warning("Could not load author profile for %s",
                        user_id, exc_info=True)
     return None
-
-
-def _profile_is_fresh(profile: dict | None) -> bool:
-    """True when the stored profile was written inside the throttle window."""
-    if not profile:
-        return False
-
-    raw = profile.get("updated_at")
-    if not raw:
-        return False
-
-    try:
-        updated = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
-    except ValueError:
-        logger.warning("Unparseable author_profiles.updated_at: %r", raw)
-        return False
-
-    if updated.tzinfo is None:
-        updated = updated.replace(tzinfo=UTC)
-    return datetime.now(UTC) - updated < PROFILE_REFRESH_INTERVAL
 
 
 async def _drift_warning(
@@ -111,12 +87,13 @@ async def _drift_warning(
     must not break the main analysis.
     """
     stripped = (plain_text or "").strip()
-    if len(stripped) < MIN_DRIFT_CHARS:
+    words = _word_count(stripped)
+    if words < MIN_DRIFT_WORDS:
         logger.info(
-            "[%s] drift check skipped: %d chars < %d required",
+            "[%s] drift check skipped: %d words < %d required",
             route_name,
-            len(stripped),
-            MIN_DRIFT_CHARS,
+            words,
+            MIN_DRIFT_WORDS,
         )
         return None
 
@@ -170,7 +147,6 @@ def _schedule_profile_update(
     background_tasks: BackgroundTasks,
     user: dict,
     plain_text: str,
-    profile: dict | None,
     essay_type: str,
     route_name: str,
 ) -> None:
@@ -180,13 +156,14 @@ def _schedule_profile_update(
     the background task must build its own connection from the access token.
     """
     stripped = (plain_text or "").strip()
+    words = _word_count(stripped)
 
-    if len(stripped) < MIN_PROFILE_CHARS:
+    if words <= MIN_PROFILE_WORDS:
         logger.info(
-            "[%s] profile update skipped: %d chars < %d required",
+            "[%s] profile update skipped: %d words <= %d required",
             route_name,
-            len(stripped),
-            MIN_PROFILE_CHARS,
+            words,
+            MIN_PROFILE_WORDS,
         )
         return
 
@@ -295,6 +272,11 @@ async def analyze_structure_route(
         analyze_structure(plain_text, essay_type, profile),
     )
 
+    # A drift verdict is meaningless when the analysis itself failed. Never show
+    # a stale warning alongside an error — the user cannot trust either.
+    if result.get("error"):
+        drift_warning = None
+
     if drift_warning:
         # Never feed drifted text back into the baseline: otherwise one casual
         # paste would overwrite the author's normal style minutes later.
@@ -306,7 +288,6 @@ async def analyze_structure_route(
             background_tasks,
             user,
             plain_text,
-            profile,
             essay_type,
             "structure",
         )
@@ -356,6 +337,11 @@ async def analyze_contextual_route(
         analyze_contextual(plain_text, essay_type, profile),
     )
 
+    # A drift verdict is meaningless when the analysis itself failed. Never show
+    # a stale warning alongside an error — the user cannot trust either.
+    if result.get("error"):
+        drift_warning = None
+
     if drift_warning:
         logger.info(
             "[/api/analyze/contextual] profile update skipped: drift detected"
@@ -365,7 +351,6 @@ async def analyze_contextual_route(
             background_tasks,
             user,
             plain_text,
-            profile,
             essay_type,
             "contextual",
         )
@@ -408,17 +393,68 @@ async def build_profile(
 
     return HTMLResponse(
         '<div class="alert alert-success">'
-        "<strong>Profile Updated!</strong><br>"
+        "<strong>Profile updated</strong><br>"
         f"Persona: {html.escape(essay_type.title())}<br>"
         f"Tone: {tone}<br>"
         f"Register: {register}<br>"
-        "Vector Memory Saved."
+        "Stylometric baseline saved."
         "</div>"
+    )
+
+
+@router.post("/accept-drift", response_class=HTMLResponse)
+async def accept_drift(
+    request: Request,
+    plain_text: str = Form(""),
+    essay_type: str = Form(DEFAULT_ESSAY_TYPE),
+    user: dict = Depends(get_current_user),
+):
+    """Fold the current essay into the persona's profile instead of resetting.
+
+    Drift detection deliberately skips the normal background profile update,
+    so this is the explicit "this is my style" path. Existing history is kept:
+    the essay is added as one more Welford sample.
+    """
+    if len(plain_text) > settings.MAX_PLAIN_TEXT_CHARS:
+        return templates.TemplateResponse(
+            "partials/baseline_status.html",
+            {"request": request, "message": None, "error": TOO_LONG},
+        )
+
+    essay_type = normalize_essay_type(essay_type)
+    logger.info(
+        "[/api/analyze/accept-drift] user=%s persona=%s chars=%d",
+        user["id"],
+        essay_type,
+        len(plain_text),
+    )
+    result = await update_user_style_profile(
+        user["id"], plain_text, user["access_token"], essay_type
+    )
+    if "error" in result:
+        logger.info(
+            "[/api/analyze/accept-drift] update failed for %s: %s",
+            user["id"],
+            result["error"],
+        )
+        return templates.TemplateResponse(
+            "partials/baseline_status.html",
+            {"request": request, "message": None, "error": result["error"]},
+        )
+
+    return templates.TemplateResponse(
+        "partials/baseline_status.html",
+        {
+            "request": request,
+            "message": "Added to your style profile.",
+            "error": None,
+        },
     )
 
 
 @router.post("/reset", response_class=HTMLResponse)
 async def reset_profile(
+    request: Request,
     essay_type: str = Form("expository"),
     user: dict = Depends(get_current_user),
     client=Depends(get_user_supabase),
@@ -429,19 +465,17 @@ async def reset_profile(
     otherwise freeze the baseline for that persona forever. This endpoint is
     the escape hatch behind the editor's "Reset baseline" button.
     """
-    # Normalize essay_type to lowercase to match the database exactly
-    essay_type = essay_type.strip().lower() if essay_type else "expository"
+    essay_type = normalize_essay_type(essay_type)
     logger.info(
         "[/api/analyze/reset] user=%s persona=%s", user["id"], essay_type
     )
 
     try:
-        res = (
+        res = await execute_async(
             client.table("author_profiles")
             .delete()
             .eq("user_id", user["id"])
             .eq("essay_type", essay_type)
-            .execute()
         )
         removed = len(getattr(res, "data", None) or [])
         logger.info(
@@ -450,15 +484,24 @@ async def reset_profile(
             user["id"],
             essay_type,
         )
-        return HTMLResponse('<span class="text-muted">Baseline reset.</span>')
-    except Exception as e:
+        return templates.TemplateResponse(
+            "partials/baseline_status.html",
+            {"request": request, "message": "Baseline reset.", "error": None},
+        )
+    except Exception:
         logger.exception(
             "[/api/analyze/reset] could not clear baseline for %s", user["id"]
         )
-        return HTMLResponse(
-            f'<span class="text-danger">Failed to reset: {e}</span>'
+        # Never interpolate exception text into markup: it can contain
+        # database/URL details, and every other route escapes it.
+        return templates.TemplateResponse(
+            "partials/baseline_status.html",
+            {
+                "request": request,
+                "message": None,
+                "error": "Could not reset the baseline. Please try again.",
+            },
         )
-
 
 
 @router.post("/style-drift", response_class=HTMLResponse)
@@ -469,10 +512,11 @@ async def check_drift_route(
     user: dict = Depends(get_current_user),
     client=Depends(get_user_supabase),
 ):
-    if len(plain_text.strip()) < MIN_DRIFT_CHARS:
+    if _word_count(plain_text) < MIN_DRIFT_WORDS:
         return HTMLResponse(
             '<div class="alert alert-warning">'
-            "Text is too short to check style drift.</div>"
+            f"Text is too short to check style drift (needs at least "
+            f"{MIN_DRIFT_WORDS} words).</div>"
         )
 
     essay_type = normalize_essay_type(essay_type)

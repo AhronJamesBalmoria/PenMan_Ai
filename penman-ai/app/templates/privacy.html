@@ -2,39 +2,59 @@
 {% block title %}Privacy Policy | Penman AI{% endblock %}
 
 {% block content %}
-<div class="container py-5" style="max-width: 760px;">
-    <h1 class="fw-bold mb-3">Privacy Policy</h1>
-    <p class="text-muted small mb-4">Last updated: November 2026</p>
+<div class="auth-page">
+    <div class="auth-card legal-card">
+        <h1 class="auth-title">Privacy Policy</h1>
+        <p class="auth-subtitle">Last updated: November 2026</p>
 
-    <h5 class="fw-bold mt-4">How we handle your writing</h5>
-    <p class="text-muted">
-        Your drafts are stored in Supabase and are only accessible to your account.
-        When you request feedback, your text is sent to third-party AI providers
-        (Groq, OpenRouter) for analysis, and to LanguageTool for grammar checking.
-        A style profile (tone, register and stylometric patterns such as sentence
-        rhythm and word-choice habits) is also stored so Penman can flag large
-        changes in your writing voice.
-    </p>
+        <p class="text-muted small">
+            This notice explains what Penman AI collects and why, in line with the
+            Data Privacy Act of 2012 (Republic Act No. 10173).
+        </p>
 
-    <h5 class="fw-bold mt-4">What we do not do</h5>
-    <p class="text-muted">
-        We do not use your text to train models. We do not sell your data. Only send
-        text you are comfortable sharing with the services listed above.
-    </p>
+        <h5 class="fw-bold mt-4">What we collect and why</h5>
+        <ul class="text-muted small">
+            <li>Account data (your email and username) to create and secure your account.</li>
+            <li>Your drafts to save them and to give you feedback and grammar suggestions when you ask.</li>
+            <li>
+                A style profile (tone, register, sentence rhythm and word-choice habits),
+                created automatically when you request feedback so Penman can flag large
+                changes in your writing voice. You can remove it at any time with
+                "Reset baseline".
+            </li>
+            <li>[Basic usage logs] to keep the service secure and fix problems.</li>
+        </ul>
+        <p class="text-muted small">
+            We use your data based on your consent, which you can withdraw at any time.
+            Please do not put sensitive information (health, government ID numbers,
+            financial details) in your drafts.
+        </p>
 
-    <h5 class="fw-bold mt-4">Academic integrity</h5>
-    <p class="text-muted">
-        Penman AI is an assistant for grammar and feedback. It does not write essays
-        on your behalf. All submitted work must remain your own.
-    </p>
+        <h5 class="fw-bold mt-4">Who receives your text</h5>
+        <p class="text-muted small">
+            When you request feedback, your text goes to Groq and OpenRouter (AI
+            feedback) and LanguageTool (grammar checking). Supabase hosts our database.
+            These services may run on servers outside the Philippines. We do not sell
+            your data, and we do not share it with your school or instructors.
+        </p>
+        <p class="text-muted small">
+            We do not use your text to train AI models. Each provider has its own rules,
+            so only send text you are comfortable sharing with these services.
+        </p>
 
-    <h5 class="fw-bold mt-4">Your choices</h5>
-    <p class="text-muted">
-        You can delete any draft from your Drafts page. To remove your style profile,
-        use "Reset baseline" in the feedback panel. To ask about your data, contact
-        the app administrator.
-    </p>
+        <h5 class="fw-bold mt-4">How long we keep it</h5>
+        <p class="text-muted small">
+            Drafts stay until you delete them. Your style profile stays until you reset it.
+        </p>
 
-    <p class="mt-4"><a href="/register">← Back to registration</a></p>
+        <h5 class="fw-bold mt-4">Your rights</h5>
+        <p class="text-muted small">
+            You can ask to see, correct or delete your data, object to how it is used,
+            or withdraw your consent. You can delete drafts yourself on the Drafts page
+            and reset your style profile from the feedback panel.
+        </p>
+
+        <p class="mt-4 mb-0"><a href="/register">Back to registration</a></p>
+    </div>
 </div>
 {% endblock %}

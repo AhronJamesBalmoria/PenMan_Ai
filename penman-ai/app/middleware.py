@@ -15,10 +15,11 @@ from app.auth_session import (
 SKIP_PREFIXES = ("/static/",)
 SKIP_PATHS = {"/health", "/favicon.ico"}
 
-# Auth POSTs manage the session cookies themselves. Rewriting cookies here
+# Auth routes manage the session cookies themselves. Rewriting cookies here
 # would append the "clear" headers *after* the fresh ones the route just set,
 # and the browser keeps the last write — silently logging the user back out.
 COOKIE_OWNED_ROUTES = {
+    ("GET", "/auth/confirm"),
     ("POST", "/auth/login"),
     ("POST", "/auth/register"),
     ("POST", "/auth/logout"),
@@ -31,7 +32,8 @@ CONTENT_SECURITY_POLICY = "; ".join(
         "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com",
         "img-src 'self' data:",
         "font-src 'self' data: https://cdn.jsdelivr.net https://fonts.gstatic.com",
-        "connect-src 'self' https://cdn.jsdelivr.net https://unpkg.com",
+        "connect-src 'self' https://cdn.jsdelivr.net https://unpkg.com "
+        "https://*.supabase.co",
         "frame-ancestors 'none'",
         "base-uri 'self'",
         "form-action 'self'",
@@ -75,6 +77,16 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response: Response = await call_next(request)
         headers = response.headers
+
+        # Drafts, editor, analysis partials and the reset form all contain
+        # user-specific data in the HTML itself. Never let a shared browser
+        # persist those responses to disk.
+        if headers.get("content-type", "").startswith("text/html") and (
+            getattr(request.state, "user", None)
+            or request.url.path == "/reset-password"
+        ):
+            headers["Cache-Control"] = "no-store"
+
         headers.setdefault("Content-Security-Policy", CONTENT_SECURITY_POLICY)
         headers.setdefault("X-Content-Type-Options", "nosniff")
         headers.setdefault("X-Frame-Options", "DENY")

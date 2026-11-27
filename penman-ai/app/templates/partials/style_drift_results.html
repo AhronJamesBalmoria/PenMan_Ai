@@ -1,12 +1,11 @@
 {% if error %}
 <div class="alert alert-danger small mb-0">{{ error }}</div>
-{% else %}
-<div class="d-flex justify-content-between align-items-center gap-2 mb-3">
-    <span class="text-uppercase text-muted small fw-semibold">Style Drift Analysis</span>
-    <span class="model-badge">Similarity: {{ similarity }}</span>
+{% elif reason == "not enough history" %}
+<div class="empty-state small text-center py-4">
+    Not enough history yet — Penman needs at least three analyzed essays for this
+    essay type before it can judge style drift.
 </div>
-
-{% if is_drastic %}
+{% elif is_drastic %}
 <div class="drift-alert" role="alert">
     <span class="drift-alert-icon" aria-hidden="true">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -20,9 +19,12 @@
     <div>
         <div class="drift-alert-title">Drastic Style Change Detected</div>
         <div class="drift-alert-text">
-            This draft is very different from your historical writing style (which is usually
-            <strong>{{ saved_tone }}</strong>). Did you intentionally change your tone for this piece, or did you paste
+            This draft is very different from your usual <strong>{{ saved_tone }}</strong>
+            style. Did you intentionally change your tone for this piece, or did you paste
             someone else's text?
+            {% if changes %}
+            <span class="d-block mt-1">{{ changes|join('; ') }}.</span>
+            {% endif %}
         </div>
     </div>
 </div>
@@ -32,10 +34,9 @@
     <div>
         <div class="fw-semibold small">Style Consistent</div>
         <div class="small text-muted">
-            This draft closely matches your historical writing style. Your tone and vocabulary are consistent with
-            your profile.
+            This draft's sentence rhythm and word choices are close to your
+            saved <strong>{{ saved_tone }}</strong> baseline.
         </div>
     </div>
 </div>
-{% endif %}
 {% endif %}

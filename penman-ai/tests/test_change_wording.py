@@ -1,6 +1,8 @@
 """Human-readable drift-change phrasing."""
-from app.services.style_profiler import _describe_change
+import asyncio
+
 from app.routers.analysis import _drift_warning
+from app.services.style_profiler import _describe_change
 
 
 def test_sentence_length_wording():
@@ -67,9 +69,8 @@ def test_drift_warning_joins_changes_clearly():
     original = analysis.check_style_drift
     analysis.check_style_drift = fake_drift
     try:
-        import asyncio
         warning = asyncio.run(
-            _drift_warning("u", "x" * 60, "creative", FakeClient(), "structure")
+            _drift_warning("u", "word " * 110, "creative", FakeClient(), "structure")
         )
     finally:
         analysis.check_style_drift = original

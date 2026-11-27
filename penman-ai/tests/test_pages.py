@@ -1,12 +1,8 @@
-"""Page rendering and consent gating."""
-from types import SimpleNamespace
-
+"""Page rendering after the consent-flow removal."""
 from conftest import USER_ID
 
 
-def test_editor_renders_for_consented_user(client, fake_db):
-    fake_db.profiles[USER_ID] = {"id": USER_ID, "consent_given": True}
-
+def test_editor_renders(client):
     response = client.get("/editor")
 
     assert response.status_code == 200
@@ -16,21 +12,12 @@ def test_editor_renders_for_consented_user(client, fake_db):
     assert "nav nav-pills" in response.text
     assert "placeholder-glow" in response.text
     assert "data-feedback-tab" in response.text
+    assert '<span id="word-count-top">0</span> words' in response.text
     # The divs in the editor layout must balance out.
     assert response.text.count('<div') == response.text.count('</div>')
 
 
-def test_editor_redirects_to_consent_without_consent(client, fake_db):
-    fake_db.profiles[USER_ID] = {"id": USER_ID, "consent_given": False}
-
-    response = client.get("/editor")
-
-    assert response.status_code == 303
-    assert response.headers["location"] == "/consent"
-
-
-def test_editor_renders_stored_draft(client, fake_db, store):
-    fake_db.profiles[USER_ID] = {"id": USER_ID, "consent_given": True}
+def test_editor_renders_stored_draft(client, store):
     draft_id = "44444444-4444-4444-4444-444444444444"
     store[draft_id] = {
         "id": draft_id,
@@ -50,62 +37,44 @@ def test_editor_renders_stored_draft(client, fake_db, store):
     assert 'value="persuasive" selected' in response.text
 
 
-def test_drafts_page_shows_delete_flash(client, fake_db):
-    fake_db.profiles[USER_ID] = {"id": USER_ID, "consent_given": True}
-
+def test_drafts_page_shows_delete_flash(client):
     response = client.get("/drafts?deleted=1")
 
     assert response.status_code == 200
     assert "Draft deleted." in response.text
 
 
-def test_drafts_page_shows_error_flash(client, fake_db):
-    fake_db.profiles[USER_ID] = {"id": USER_ID, "consent_given": True}
-
+def test_drafts_page_shows_error_flash(client):
     response = client.get("/drafts?error=Could+not+delete+that+draft.")
 
     assert response.status_code == 200
     assert "Could not delete that draft." in response.text
 
 
-def test_consent_creates_missing_profile_row(client, fake_db):
-    assert fake_db.profiles == {}
-
-    response = client.post(
-        "/auth/consent",
-        data={"privacy_consent": "on", "academic_consent": "on"},
-    )
-
-    assert response.status_code == 303
-    assert response.headers["location"] == "/drafts"
-    assert fake_db.profiles[USER_ID]["consent_given"] is True
+def test_consent_pages_are_removed(anonymous_client):
+    assert anonymous_client.get("/consent").status_code == 404
+    assert anonymous_client.post("/auth/consent").status_code == 404
 
 
-def test_consent_without_writable_profile_reports_error(client, fake_db, monkeypatch):
-    """A failed write must show an error instead of looping /consent → /editor."""
+def test_editor_placeholder_aligns_with_caret():
+    from app.config import BASE_DIR
 
-    class EmptyResult:
-        def update(self, payload):
-            return self
+    css = (BASE_DIR / "static" / "css" / "style.css").read_text(encoding="utf-8")
+    rule = css.split(".ql-editor.ql-blank::before {", 1)[1].split("}", 1)[0]
+    assert "left: 1.5rem" in rule
+    assert "top: 2.5rem" in rule
 
-        def upsert(self, payload):
-            return self
 
-        def eq(self, *args):
-            return self
+def test_reset_menu_is_the_rightmost_footnote_item():
+    from app.config import BASE_DIR
 
-        def execute(self):
-            return SimpleNamespace(data=[])
+    css = (BASE_DIR / "static" / "css" / "style.css").read_text(encoding="utf-8")
+    rule = css.split("#baseline-status {", 1)[1].split("}", 1)[0]
+    assert "position: absolute" in rule
+    assert "right: 0" in rule
 
-    monkeypatch.setattr(fake_db, "table", lambda name: EmptyResult())
-
-    response = client.post(
-        "/auth/consent",
-        data={"privacy_consent": "on", "academic_consent": "on"},
-    )
-
-    assert response.status_code == 500
-    assert "could not save your consent" in response.text.lower()
+    html = (BASE_DIR / "templates" / "editor.html").read_text(encoding="utf-8")
+    assert 'id="baseline-status"' in html
 
 
 def test_health_endpoint(anonymous_client):

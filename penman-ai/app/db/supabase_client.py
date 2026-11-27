@@ -1,6 +1,20 @@
-from supabase import Client, create_client
+from typing import Any
+
+from starlette.concurrency import run_in_threadpool
 
 from app.config import settings
+from supabase import Client, create_client
+
+
+async def execute_async(query: Any) -> Any:
+    """Run a PostgREST query builder without blocking the event loop.
+
+    Building the chain (``table(...).select(...).eq(...)``) does no I/O, so it
+    is safe on the loop; only ``.execute()`` performs the network call. The
+    supabase-py client is synchronous, so the call is handed to a worker thread
+    instead of stalling every other request behind it.
+    """
+    return await run_in_threadpool(query.execute)
 
 
 def get_supabase() -> Client:

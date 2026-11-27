@@ -3,8 +3,8 @@ import asyncio
 
 import pytest
 
-from app.services.stylometry import FEATURE_COUNT, FEATURE_NAMES, style_features
 from app.services.style_profiler import check_style_drift
+from app.services.stylometry import FEATURE_COUNT, FEATURE_NAMES, style_features
 
 NORMAL_ESSAY = (
     "Writing by hand feels slow compared with typing. It demands attention. "
@@ -13,7 +13,12 @@ NORMAL_ESSAY = (
     "choreography that typing cannot replicate. Students often discover that "
     "notes taken by hand are understood more deeply.\n\n"
     "Therefore, although keyboards are efficient, the quiet act of writing "
-    "still has a place in learning."
+    "still has a place in learning. The deliberate pace gives the mind room "
+    "to rearrange an idea before it hardens into a sentence, and that small "
+    "delay is often where a better argument begins.\n\n"
+    "Teachers who require handwritten drafts report fewer borrowed phrases "
+    "and more personal examples, perhaps because the effort of forming each "
+    "letter makes the writer accountable for every claim they make."
 )
 
 
@@ -96,6 +101,19 @@ def test_drift_not_enough_history():
     assert result["changes"] == []
 
 
+def test_drift_too_short_text_is_not_judged():
+    client = FakeClient({
+        "feature_mean": [0.0] * FEATURE_COUNT,
+        "feature_m2": [0.02] * FEATURE_COUNT,
+        "essay_count": 10,
+        "tone": "reflective",
+    })
+    result = asyncio.run(check_style_drift("u", "way too short", "expository", client))
+    assert result["is_drastic"] is False
+    assert result["reason"] == "too short"
+    assert "too short" in result["error"]
+
+
 def test_drift_normal_essay():
     features = style_features(NORMAL_ESSAY)
     client = FakeClient({
@@ -113,7 +131,15 @@ def test_drift_clearly_different_essay():
     baseline = style_features(NORMAL_ESSAY)
     other = (
         "Wow! Really? Amazing!! What a day! Is this it? Yes! "
-        "Crazy, wild, amazing; unbelievable: fantastic—superb (wow)!"
+        "Crazy, wild, amazing; unbelievable: fantastic—superb (wow)! "
+        "lol idk why even try?? this is so random!!! ok whatever, moving on... "
+        "hey guess what?? i got the thing!! nice right? anyway lol!!! "
+        "sooo tired, brb, gotta go!! wait—no, actually, hmm?! "
+        "wow again!!! crazy how that works, right?? anyway :D "
+        "yeah yeah yeah, whatever, let's just do it!!! what could go wrong?? "
+        "haha, seriously though, this is wild!! absolutely wild!!! ok done. "
+        "one more thing!!! did you see that?? no way!! wow wow wow. "
+        "anyway, that's all, bye!!! totally not overthinking this at all."
     )
     other_features = style_features(other)
     m2 = [max(abs(a - b) ** 2 * 0.01, 1e-6)

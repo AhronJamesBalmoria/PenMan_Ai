@@ -1,5 +1,3 @@
-console.log("✅ MODAL JS LOADED");
-
 document.body.addEventListener('htmx:confirm', function (evt) {
     // If there's no question, let HTMX proceed normally
     if (!evt.detail.question) return;

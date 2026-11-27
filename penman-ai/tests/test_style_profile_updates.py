@@ -2,7 +2,6 @@
 import asyncio
 from datetime import UTC, datetime
 
-from app.constants import DEFAULT_ESSAY_TYPE
 from app.services import style_profiler
 from app.services.stylometry import FEATURE_COUNT
 
@@ -69,6 +68,28 @@ def _setup(monkeypatch, client, metrics_calls=None):
     return calls
 
 
+def test_profile_requires_more_than_100_words(monkeypatch):
+    """Exactly 100 words is skipped; 101 words is stored."""
+    client = FakeClient()
+    _setup(monkeypatch, client)
+
+    too_short = asyncio.run(
+        style_profiler.update_user_style_profile(
+            "u", "word " * 100, "t", "expository"
+        )
+    )
+    assert "error" in too_short
+    assert client.store["author_profiles"] == {}
+
+    accepted = asyncio.run(
+        style_profiler.update_user_style_profile(
+            "u", "word " * 101, "t", "expository"
+        )
+    )
+    assert accepted["success"] is True
+    assert len(client.store["author_profiles"]) == 1
+
+
 def test_same_essay_twice_does_not_increment_count(monkeypatch):
     client = FakeClient()
     _setup(monkeypatch, client)
@@ -84,9 +105,9 @@ def test_three_distinct_essays_build_history(monkeypatch):
     client = FakeClient()
     _setup(monkeypatch, client)
     essays = [
-        "First essay with several words and a few sentences. " * 8,
-        "Second essay, with commas; and other punctuation! " * 8,
-        "Third essay? Yes, indeed. More words here. " * 8,
+        "First essay with several words and a few sentences. " * 15,
+        "Second essay, with commas; and other punctuation! " * 15,
+        "Third essay? Yes, indeed. More words here. " * 15,
     ]
     for essay in essays:
         asyncio.run(style_profiler.update_user_style_profile(

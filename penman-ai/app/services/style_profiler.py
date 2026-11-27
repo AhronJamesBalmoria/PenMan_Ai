@@ -15,17 +15,23 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from app.constants import DEFAULT_ESSAY_TYPE, normalize_essay_type
-from app.db.supabase_client import get_supabase_with_token
+from app.db.supabase_client import execute_async, get_supabase_with_token
 from app.services.gemini import generate_json  # Groq/OpenRouter fallback chain
 from app.services.stylometry import FEATURE_NAMES, style_features
 
 logger = logging.getLogger(__name__)
 
-MIN_PROFILE_CHARS = 100
+# A style baseline needs more than 100 words to be meaningful. Short drafts
+# still save normally; they just are not folded into the writing profile.
+MIN_PROFILE_WORDS = 100
+
+# Drift checks need enough text for punctuation and function-word rates to be
+# stable. 50 characters (~10 words) produced almost pure noise.
+MIN_DRIFT_WORDS = 100
 
 # Drift rule (named constants so tuning is obvious):
-Z_THRESHOLD = 2.5          # a feature must be this many std devs from the mean
-MIN_DRIFT_FEATURES = 2     # ...and at least this many features must breach
+Z_THRESHOLD = 3.0          # a feature must be this many std devs from the mean
+MIN_DRIFT_FEATURES = 3     # ...and at least this many features must breach
 MIN_HISTORY_ESSAYS = 3     # no drift verdict before this many prior essays
 STD_FLOOR = 0.01           # absolute floor on std to avoid early-variance blowups
 STD_RELATIVE_FLOOR = 0.10  # ...plus a floor relative to the feature mean
@@ -163,9 +169,9 @@ def _describe_change(name: str, mean: float, value: float) -> str:
         pct = round(abs(difference) / mean * 100)
         if pct < 5:
             return ""
-        return ("your sentences are about %d%% shorter than usual" % pct
+        return (f"your sentences are about {pct}% shorter than usual"
                 if difference < 0
-                else "your sentences are about %d%% longer than usual" % pct)
+                else f"your sentences are about {pct}% longer than usual")
     if name == "sentence length variation":
         return ("your sentences are more uniform in length than usual"
                 if difference < 0
@@ -174,9 +180,9 @@ def _describe_change(name: str, mean: float, value: float) -> str:
         pct = round(abs(difference) / mean * 100) if mean > 1e-9 else 0
         if pct < 5:
             return ""
-        return ("your words are about %d%% longer than usual" % pct
+        return (f"your words are about {pct}% longer than usual"
                 if difference > 0
-                else "your words are about %d%% shorter than usual" % pct)
+                else f"your words are about {pct}% shorter than usual")
     if name == "vocabulary richness":
         return ("your vocabulary is more varied than usual"
                 if difference > 0
@@ -185,9 +191,9 @@ def _describe_change(name: str, mean: float, value: float) -> str:
         pct = round(abs(difference) / mean * 100) if mean > 1e-9 else 0
         if pct < 5:
             return ""
-        return ("your paragraphs are about %d%% longer than usual" % pct
+        return (f"your paragraphs are about {pct}% longer than usual"
                 if difference > 0
-                else "your paragraphs are about %d%% shorter than usual" % pct)
+                else f"your paragraphs are about {pct}% shorter than usual")
 
     # Punctuation / contraction rates.
     if name in _USAGE_LABELS:
@@ -224,13 +230,17 @@ async def update_user_style_profile(
         len(stripped),
     )
 
-    if len(stripped) < MIN_PROFILE_CHARS:
+    words = len(stripped.split())
+    if words <= MIN_PROFILE_WORDS:
         logger.info(
-            "[style_profile] skipped: %d chars < %d required",
-            len(stripped),
-            MIN_PROFILE_CHARS,
+            "[style_profile] skipped: %d words <= %d required",
+            words,
+            MIN_PROFILE_WORDS,
         )
-        return {"error": "Text too short to extract a reliable style profile."}
+        return {
+            "error": "Text too short to extract a reliable style profile "
+            "(needs more than 100 words)."
+        }
 
     # 1. Compute stylometric features locally (CPU-bound; off the event loop).
     sample = await asyncio.to_thread(style_features, stripped)
@@ -247,13 +257,12 @@ async def update_user_style_profile(
     #    and whether the 5-minute LLM throttle is still active.
     prior_row: dict = {}
     try:
-        prior = (
+        prior = await execute_async(
             client.table(PROFILE_TABLE)
             .select("feature_mean, feature_m2, essay_count, last_content_hash, "
                     "tone, register, updated_at")
             .eq("user_id", user_id)
             .eq("essay_type", persona)
-            .execute()
         )
         rows = getattr(prior, "data", None) or []
         if rows:
@@ -323,12 +332,17 @@ async def update_user_style_profile(
         "feature_m2": m2,
         "essay_count": count,
         "last_content_hash": last_hash,
+        # Without this the 5-minute LLM throttle would never expire: a column
+        # DEFAULT only applies on INSERT, not on the upsert's UPDATE branch.
+        "updated_at": datetime.now(UTC).isoformat(),
     }
 
     try:
-        response = client.table(PROFILE_TABLE).upsert(
-            profile_data, on_conflict="user_id,essay_type"
-        ).execute()
+        response = await execute_async(
+            client.table(PROFILE_TABLE).upsert(
+                profile_data, on_conflict="user_id,essay_type"
+            )
+        )
     except Exception as exc:
         logger.exception("[style_profile] Supabase upsert failed: %s", exc)
         return {"error": f"Failed to save style profile: {exc}"}
@@ -358,12 +372,11 @@ async def check_style_drift(
     text = (current_text or "").strip()
 
     try:
-        saved_profile = (
+        saved_profile = await execute_async(
             supabase_client.table(PROFILE_TABLE)
             .select("feature_mean, feature_m2, essay_count, tone")
             .eq("user_id", user_id)
             .eq("essay_type", persona)
-            .execute()
         )
         rows = getattr(saved_profile, "data", None) or []
         if not rows:
@@ -385,6 +398,19 @@ async def check_style_drift(
                 "is_drastic": False,
                 "error": None,
                 "reason": "not enough history",
+                "changes": [],
+                "saved_tone": saved_tone,
+            }
+
+        words = len(text.split())
+        if words < MIN_DRIFT_WORDS:
+            return {
+                "is_drastic": False,
+                "error": (
+                    "Text is too short for a reliable style check "
+                    f"(needs at least {MIN_DRIFT_WORDS} words)."
+                ),
+                "reason": "too short",
                 "changes": [],
                 "saved_tone": saved_tone,
             }

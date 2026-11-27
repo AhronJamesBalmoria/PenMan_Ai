@@ -3,6 +3,8 @@ import logging
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from app.config import settings
+from app.db.supabase_client import execute_async
 from app.dependencies import get_current_user, get_optional_user, get_user_supabase
 from app.templating import templates
 
@@ -17,21 +19,6 @@ async def offline_page(request: Request):
         "offline.html",
         {"request": request, "user": get_optional_user(request)},
     )
-
-
-def _check_consent(client, user_id: str) -> bool:
-    try:
-        res = (
-            client.table("profiles")
-            .select("consent_given")
-            .eq("id", user_id)
-            .single()
-            .execute()
-        )
-        return bool(res.data and res.data.get("consent_given"))
-    except Exception:
-        logger.warning("Could not read consent for %s", user_id, exc_info=True)
-        return False
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -69,7 +56,16 @@ async def forgot_password_page(request: Request):
 
 @router.get("/reset-password", response_class=HTMLResponse)
 async def reset_password_page(request: Request):
-    return templates.TemplateResponse("reset_password.html", {"request": request})
+    # The anon key is public by design; auth.js needs it to exchange a PKCE
+    # code. The server-side token_hash path uses the same project values.
+    return templates.TemplateResponse(
+        "reset_password.html",
+        {
+            "request": request,
+            "supabase_url": settings.SUPABASE_URL,
+            "supabase_anon_key": settings.SUPABASE_ANON_KEY,
+        },
+    )
 
 
 @router.get("/privacy", response_class=HTMLResponse)
@@ -82,22 +78,6 @@ async def terms_page(request: Request):
     return templates.TemplateResponse("terms.html", {"request": request})
 
 
-@router.get("/consent", response_class=HTMLResponse)
-async def consent_page(
-    request: Request,
-    user: dict = Depends(get_current_user),
-    client=Depends(get_user_supabase),
-):
-    try:
-        if _check_consent(client, user["id"]):
-            return RedirectResponse(url="/drafts", status_code=303)
-    except Exception:
-        logger.warning("Consent check failed for %s", user["id"], exc_info=True)
-    return templates.TemplateResponse(
-        "consent.html", {"request": request, "user": user}
-    )
-
-
 @router.get("/editor", response_class=HTMLResponse)
 async def editor_page(
     request: Request,
@@ -106,19 +86,15 @@ async def editor_page(
     user: dict = Depends(get_current_user),
     client=Depends(get_user_supabase),
 ):
-    if not _check_consent(client, user["id"]):
-        return RedirectResponse(url="/consent", status_code=303)
-
     draft = None
     if draft_id:
         try:
-            dres = (
+            dres = await execute_async(
                 client.table("drafts")
                 .select("*")
                 .eq("id", draft_id)
                 .eq("user_id", user["id"])
                 .single()
-                .execute()
             )
             draft = dres.data
         except Exception:
@@ -144,16 +120,12 @@ async def drafts_page(
     user: dict = Depends(get_current_user),
     client=Depends(get_user_supabase),
 ):
-    if not _check_consent(client, user["id"]):
-        return RedirectResponse(url="/consent", status_code=303)
-
     try:
-        dres = (
+        dres = await execute_async(
             client.table("drafts")
             .select("*")
             .eq("user_id", user["id"])
             .order("updated_at", desc=True)
-            .execute()
         )
         drafts = dres.data or []
     except Exception:

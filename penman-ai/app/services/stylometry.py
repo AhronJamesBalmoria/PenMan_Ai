@@ -27,7 +27,10 @@ FUNCTION_WORDS = (
 
 _WORD_RE = re.compile(r"\b\w+\b", re.UNICODE)
 _SENTENCE_SPLIT_RE = re.compile(r"[.!?]+[\"')\]]*|\n+")
-_PARAGRAPH_SPLIT_RE = re.compile(r"\n\s*\n")
+# Quill emits one newline per block, so paragraphs are separated by any run
+# of newlines (not just blank lines). Splitting on blank lines alone made the
+# whole draft a single "paragraph" and turned this feature into word count.
+_PARAGRAPH_SPLIT_RE = re.compile(r"\n+")
 _CONTRACTION_RE = re.compile(r"\b\w+['\u2019](?:t|s|re|ve|ll|d|m)\b", re.IGNORECASE)
 _DASH_CHARS = "-–—"
 

@@ -1,4 +1,4 @@
-{% if drift_warning %}
+{% if drift_warning and not error %}
 {% include "partials/drift_warning.html" %}
 {% endif %}
 
@@ -12,7 +12,7 @@
     <div class="text-uppercase text-muted small fw-semibold">Contextual Analysis</div>
 </div>
 
-<div class="d-flex flex-wrap gap-3 mb-2 contextual-meta">
+<div class="d-flex flex-nowrap gap-2 mb-2 contextual-meta">
     <span>Tone: <span class="text-body fw-semibold">{{ tone or '—' }}</span></span>
     <span>Register: <span class="text-body fw-semibold">{{ register or '—' }}</span></span>
     <span>Alignment Score
